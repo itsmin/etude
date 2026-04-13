@@ -320,7 +320,12 @@ pick_model() {
     printf '    [n] none (skip %s)\n' "$role" >&2
   fi
 
+  # For optional roles, default to skip. This biases install toward
+  # "minimal working install" instead of "silently pull the heaviest
+  # model on the list" — which matters for --non-interactive mode and
+  # makes interactive Enter-key presses safer too.
   local default="1"
+  [ "$required" != "required" ] && default="n"
   while true; do
     local choice
     choice=$(ask "pick $role" "$default")
