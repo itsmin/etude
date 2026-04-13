@@ -1,0 +1,48 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (this Mac)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "qwen3:4b": {
+          "name": "Qwen3 4B (daily — snappy)",
+          "tools": true,
+          "limit": { "context": 16384, "output": 4096 }
+        },
+        "qwen3:8b": {
+          "name": "Qwen3 8B (heavy — close the browser)",
+          "tools": true,
+          "limit": { "context": 16384, "output": 4096 }
+        },
+        "glm-5:cloud": {
+          "name": "GLM-5 (Ollama Cloud)",
+          "tools": true,
+          "limit": { "context": 131072, "output": 8192 }
+        },
+        "kimi-k2.5:cloud": {
+          "name": "Kimi K2.5 (Ollama Cloud)",
+          "tools": true,
+          "limit": { "context": 131072, "output": 8192 }
+        }
+      }
+    },
+    "ollama-desktop": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Desktop (LAN, optional)",
+      "options": {
+        "baseURL": "http://desktop.local:11434/v1"
+      },
+      "models": {
+        "qwen3-coder:30b-a3b": {
+          "name": "Qwen3-Coder 30B (LAN peer)",
+          "tools": true,
+          "limit": { "context": 32768, "output": 8192 }
+        }
+      }
+    }
+  }
+}

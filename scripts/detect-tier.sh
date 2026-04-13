@@ -1,119 +1,146 @@
 #!/usr/bin/env bash
-# etude — detect the machine's tier and print a recommended model config.
-# Works on macOS and Linux. On Windows, run inside WSL or see docs/install-windows.md.
+# etude — detect the machine's hardware tier and print recommendations.
+#
+# Hardware → tier-name mapping lives here (the "physics" part).
+# Tier-name → model recommendations lives in scripts/lib/tiers.tsv.
+#
+# Usage:
+#   ./scripts/detect-tier.sh              # human-readable summary
+#   ./scripts/detect-tier.sh --tier-only  # prints just the tier name (for scripts)
+#   ./scripts/detect-tier.sh --json       # prints detection facts as json-ish kv
 
 set -e
 
-platform="$(uname -s)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/tiers.sh
+source "$SCRIPT_DIR/lib/tiers.sh"
 
-print_header() {
-  echo
-  echo "etude — tier detection"
-  echo "----------------------"
-}
+MODE="human"
+case "${1:-}" in
+  --tier-only) MODE="tier-only" ;;
+  --json)      MODE="json"      ;;
+  "")          MODE="human"     ;;
+  -h|--help)
+    echo "Usage: $0 [--tier-only|--json]"
+    exit 0
+    ;;
+  *)
+    echo "etude: unknown flag '$1'" >&2
+    exit 2
+    ;;
+esac
+
+# ----------------------------------------------------------------------------
+# Hardware detection — produces: PLATFORM, TIER, RAM_GB, CHIP_OR_GPU
+# ----------------------------------------------------------------------------
+
+PLATFORM=""
+TIER=""
+RAM_GB=0
+DESCRIBE=""   # short one-line "M1 Air, 16GB" for UX
 
 detect_mac() {
+  PLATFORM="macOS (Apple Silicon)"
+  local ram_bytes
   ram_bytes=$(sysctl -n hw.memsize)
-  ram_gb=$((ram_bytes / 1024 / 1024 / 1024))
+  RAM_GB=$((ram_bytes / 1024 / 1024 / 1024))
+  local chip
   chip=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || sysctl -n hw.model)
+  DESCRIBE="$chip, ${RAM_GB}GB unified"
 
-  echo "Platform:    macOS (Apple Silicon)"
-  echo "Chip:        $chip"
-  echo "Unified RAM: ${ram_gb}GB"
-  echo
-
-  if [ "$ram_gb" -le 16 ]; then
-    echo "Tier:          mac-light"
-    echo "Daily driver:  qwen3:4b (Q4, ~2.4GB)"
-    echo "Heavy mode:    qwen3:8b (Q4, ~5.2GB) — close other apps first"
-    echo "Context:       16K"
-  elif [ "$ram_gb" -le 24 ]; then
-    echo "Tier:          mac-air-24gb"
-    echo "Daily driver:  qwen3:8b (Q4, ~5.2GB)"
-    echo "Heavy mode:    qwen3-coder:30b-a3b (Q4, ~17GB — close the browser)"
-    echo "Context:       32K"
-    echo
-    echo "Note: below the Ollama MLX backend threshold (32GB+)."
-    echo "Falls back to llama.cpp backend — still good, just no MLX decode bump."
-  elif [ "$ram_gb" -le 48 ]; then
-    echo "Tier:          mac-pro-32gb"
-    echo "Daily driver:  qwen3-coder:30b-a3b (Q4, ~17GB, MLX backend active)"
-    echo "Context:       32K–64K"
-  elif [ "$ram_gb" -le 96 ]; then
-    echo "Tier:          mac-heavy-64gb"
-    echo "Daily driver:  qwen3-coder:30b-a3b (Q4)"
-    echo "Heavy mode:    qwen3-coder-next:80b (Q4, ~46GB)"
-    echo "Context:       64K"
+  if [ "$RAM_GB" -le 16 ]; then
+    TIER="mac-light"
+  elif [ "$RAM_GB" -le 24 ]; then
+    TIER="mac-air-24gb"
+  elif [ "$RAM_GB" -le 48 ]; then
+    TIER="mac-pro-32gb"
+  elif [ "$RAM_GB" -le 96 ]; then
+    TIER="mac-heavy-64gb"
   else
-    echo "Tier:          mac-max"
-    echo "Daily driver:  qwen3-coder-next:80b (Q4)"
-    echo "Heavy mode:    experiment freely"
-    echo "Context:       128K"
+    TIER="mac-max"
   fi
-
-  echo
-  echo "Next step:     cat docs/install-macos.md"
-  echo "Config:        config/opencode/mac-air-24gb.json (adapt to your tier)"
 }
 
 detect_linux() {
+  PLATFORM="Linux"
+  local ram_kb
   ram_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
-  ram_gb=$((ram_kb / 1024 / 1024))
-
-  echo "Platform:    Linux"
-  echo "System RAM:  ${ram_gb}GB"
-  echo
+  RAM_GB=$((ram_kb / 1024 / 1024))
 
   if command -v nvidia-smi >/dev/null 2>&1; then
+    local vram_mib vram_gb gpu_name
     vram_mib=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n1)
     vram_gb=$((vram_mib / 1024))
     gpu_name=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n1)
-
-    echo "GPU:         $gpu_name"
-    echo "VRAM:        ${vram_gb}GB"
-    echo
+    DESCRIBE="$gpu_name, ${vram_gb}GB VRAM (${RAM_GB}GB system RAM)"
 
     if [ "$vram_gb" -le 12 ]; then
-      echo "Tier:          gpu-light"
-      echo "Daily driver:  qwen3:8b (Q4)"
-      echo "Context:       16K–32K"
+      TIER="gpu-light"
     elif [ "$vram_gb" -le 16 ]; then
-      echo "Tier:          gpu-16gb"
-      echo "Daily driver:  qwen3-coder:30b-a3b (Q4, ~17GB, partial offload)"
-      echo "Speed mode:    qwen3:8b (Q8, full VRAM)"
-      echo "Context:       32K"
+      TIER="gpu-16gb"
     elif [ "$vram_gb" -le 24 ]; then
-      echo "Tier:          gpu-24gb"
-      echo "Daily driver:  qwen3-coder:30b-a3b (Q4, full VRAM)"
-      echo "Alt:           dense qwen3:32b (Q4)"
-      echo "Context:       32K–64K"
+      TIER="gpu-24gb"
     else
-      echo "Tier:          gpu-heavy"
-      echo "Daily driver:  dense qwen3:32b or larger MoE"
-      echo "Context:       64K+"
+      TIER="gpu-heavy"
     fi
-
-    echo
-    echo "Next step:     cat docs/install-windows.md (Windows/WSL) or adapt steps for Linux"
-    echo "Config:        config/opencode/gpu-rtx5080-16gb.json (adapt to your VRAM tier)"
   else
-    echo "No NVIDIA GPU detected. CPU-only inference is viable only for very small models."
-    echo "Tier:          cpu-only"
-    echo "Daily driver:  qwen3:4b (expect unreliable tool calling)"
-    echo "Context:       16K"
+    DESCRIBE="No NVIDIA GPU, ${RAM_GB}GB system RAM"
+    TIER=""   # unsupported — installer must handle this case explicitly
   fi
 }
 
-print_header
-
-case "$platform" in
+case "$(uname -s)" in
   Darwin) detect_mac ;;
   Linux)  detect_linux ;;
   *)
-    echo "Unsupported platform: $platform"
-    echo "On Windows, run this script inside WSL2 or follow docs/install-windows.md directly."
+    echo "etude: unsupported platform '$(uname -s)'" >&2
+    echo "On Windows, run inside WSL2." >&2
     exit 1
     ;;
 esac
 
-echo
+# ----------------------------------------------------------------------------
+# Output
+# ----------------------------------------------------------------------------
+
+case "$MODE" in
+  tier-only)
+    echo "$TIER"
+    ;;
+
+  json)
+    printf '{"platform":"%s","tier":"%s","ram_gb":%s,"describe":"%s"}\n' \
+      "$PLATFORM" "$TIER" "$RAM_GB" "$DESCRIBE"
+    ;;
+
+  human)
+    echo
+    echo "etude — tier detection"
+    echo "----------------------"
+    printf "Platform:  %s\n" "$PLATFORM"
+    printf "Machine:   %s\n" "$DESCRIBE"
+    echo
+
+    if [ -z "$TIER" ]; then
+      echo "Tier:      (unsupported)"
+      echo
+      echo "This hardware isn't a tier etude supports out of the box."
+      echo "You can still try install.sh — it will ask you to pick a tier"
+      echo "manually, or refuse if no tier is a good fit."
+      exit 3
+    fi
+
+    if ! tiers_has "$TIER"; then
+      echo "Tier:      $TIER  (not in registry)"
+      echo
+      echo "etude: detected tier '$TIER' is not in scripts/lib/tiers.tsv." >&2
+      echo "       fix the registry or the detection logic." >&2
+      exit 4
+    fi
+
+    tiers_describe "$TIER"
+    echo
+    echo "Next step: ./install.sh"
+    echo "Registry last reviewed: $(tiers_last_reviewed)"
+    ;;
+esac

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (this PC)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "qwen3-coder:30b-a3b": {
+          "name": "Qwen3-Coder 30B-A3B (daily, full VRAM)",
+          "tools": true,
+          "limit": { "context": 65536, "output": 8192 }
+        },
+        "glm-5:cloud": {
+          "name": "GLM-5 (Ollama Cloud)",
+          "tools": true,
+          "limit": { "context": 131072, "output": 8192 }
+        }
+      }
+    }
+  }
+}
