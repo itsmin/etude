@@ -20,7 +20,7 @@ Project: **etude** — an install kit and docs for running a Claude Code-like co
 
 ## Critical reminders
 
-- **`tiers.tsv` is NOT trustworthy for agentic recommendations as of session #03.** All Qwen rows (which is every tier) are registered `reliability = good` but session #03 observed qwen3:8b and qwen3-coder:30b both fail to tool-call via opencode through ollama's OpenAI-compatible adapter. Text generation still works; tool calling does not. **Do not trust any registered Qwen row as agentically viable until the session-#04 reliability audit and the "find a working model" hunt land.** Install.sh will still install them; smoke test Levels 1–5 will still pass; the model just won't be able to use tools in opencode's Build agent. Until the audit lands, the honest user-facing guidance is "install works, `opencode run` text generation works, but don't expect agentic file edits."
+- **`tiers.tsv` is unverified for agentic use as of session #03 close.** All Qwen rows are registered `reliability = good` but session #03 observed qwen3:8b and qwen3-coder:30b both fail to tool-call via opencode. **Post-session research (same night) surfaced a likely root cause: ollama's `num_ctx` defaults to 4096 regardless of what `opencode.json` sets as the context limit**, because opencode's `provider.models.X.limit.context` controls the send-side prompt size, not the model's receive-side context window. A 4K context gets the agent system prompt + tool schemas truncated, leaving Qwen to confabulate a tool list from training memory — exactly the observed failure pattern (qwen3:8b "no Read function," qwen3-coder inventing `Skill "read_file"`). This is a **configuration bug, not a model capability bug.** Session #04 P1 tests the theory before pivoting to alternative models. Until session #04 validates the fix: install.sh still installs, Level 5 smoke test still passes, but agentic use in the opencode Build agent is unreliable.
 - **macOS install path is Ollama.app cask, not brew formula.** The brew formula (`brew install ollama`) lags the Ollama.app and may ship without the `launch` subcommand; on a machine with both installed, the formula's old client typically intercepts calls to the newer server. `install.sh` Phase 1 refuses to proceed if it detects either condition (multi-binary PATH conflict, client/server mismatch warning, or missing `launch`). The fix is always `brew uninstall ollama`; Ollama.app survives.
 - **Bare vs configured is interactive-vs-scriptable, not light-vs-full.** Bare mode relies on `ollama launch opencode` which needs a TTY. Configured mode writes `opencode.json` with an `ollama-local` provider (via `@ai-sdk/openai-compatible` → `localhost:11434/v1`) and works both in the opencode TUI and in `opencode run` headless mode. Configured is the default; bare is an opt-in for users who really don't want a config file.
 
@@ -110,27 +110,42 @@ Session #04 cannot be the M1 Air test — the M1 Air will hit the exact same bug
 
 ### Upcoming sessions
 
-**Session #04 — Registry reliability audit + working-model hunt**
+**Session #04 — Test the num_ctx theory, then audit + hunt as fallback**
 
-The goal is to restore `tiers.tsv` to a state where every `reliability = good` row is actually verified, and to find at least one working path for agentic coding via opencode on the M3 Air. M1 Air / PC rollouts come after.
+Post-session-#03 research strongly suggests the observed Qwen + opencode tool-calling failures are caused by ollama's `num_ctx` defaulting to 4096, which truncates opencode's tool-definition prompts below the point where the model ever sees the tool schema. If that's right, the fix is a config tweak, not a model pivot. Session #04 tests the theory first; only falls back to the alternative-model hunt if it doesn't hold.
 
-1. **Audit pass: demote known-bad rows.** In `tiers.tsv`, change all Qwen rows that were not personally verified in session #03 from `reliability = good` to `reliability = watching` with a note like "qwen family tool-schema issue with opencode as of 2026-04-13, see session #03". Also demote the two rows session #03 did verify (qwen3:8b for mac-air-24gb, qwen3-coder:30b for mac-air-24gb heavy) with evidence notes. Run `./install.sh --plan --non-interactive` and confirm the installer now refuses mac-air-24gb (no good daily pick) — the honest state.
-2. **Decide the hunt strategy.** Two branches, not mutually exclusive:
-   - **Try a non-Qwen local model.** Candidates from session #03 research + tonight's follow-up web search: likely `llama3.3` family, `mistral`/`devstral`, `gemma3` (if tool-calling is unbroken in current Ollama), or `deepseek-coder-v2`. Pick one, pull, test with the same README prompt in opencode. If it calls `Read` with a valid filePath, you've found a working path.
-   - **Try Ollama Cloud (`:cloud` models).** Big Pickle via OpenCode Zen worked in session #03, which means the opencode/Build-agent side is fine and the bug is specifically in local-qwen-via-ollama. A `:cloud` model routes through your local ollama client but is served by ollama.com — different code path, possibly different tool-schema translation. Requires signing up for Ollama Cloud first (open thread). GLM-5 or Kimi K2.5 would be good candidates if they're in the cloud catalog.
-3. **Update `tiers.tsv`** with whatever works. Add the new model(s) as `reliability = good`. If nothing works, that's also a finding — etude's premise gets honest about "local-first" being aspirational and the registry honestly reflects "no fully-local agentic option today."
-4. **Update `docs/models.md`** with the decision narrative. Future readers need to know what was tried and why.
-5. **Test `opencode run`** (headless) + interactive TUI + the session #03 README prompt against the winning model. All three should produce SUMMARY.md. Time each one.
-6. **File upstream minimal repro** (if time): a small test case showing "ollama X + qwen Y + OpenAI-compat tool schema Z → wrong tool call." Belongs on the ollama repo probably; cross-post to opencode if relevant. This isn't fixing upstream, just making sure the bug is findable by whoever does.
-7. **Commit in logical chunks.**
+1. **Test the num_ctx theory (FIRST, highest priority).** Total time budget: 20 minutes.
+   1. Create a variant: `ollama run qwen3:8b` → `/set parameter num_ctx 16384` → `/save qwen3:8b-16k` → `/bye`
+   2. Patch `~/.config/opencode/opencode.json` to reference `qwen3:8b-16k` instead of `qwen3:8b` under the `ollama-local` provider. Keep the display name.
+   3. Relaunch opencode from `/tmp/etude-smoke` (where `README.md` still exists from session #03).
+   4. `/models` → Qwen3 8B (daily), confirm it now resolves to the `-16k` tag.
+   5. Send the session #03 prompt: `Read README.md and write a one-sentence summary of this project to SUMMARY.md. Do not include any markdown formatting in SUMMARY.md — just the plain sentence.`
+   6. **Expected (if theory holds)**: opencode shows a `Read` tool call with `filePath: "README.md"`, then a `Write` tool call with `SUMMARY.md`, and the file actually gets written. Check with `cat /tmp/etude-smoke/SUMMARY.md`.
+   7. If qwen3:8b-16k works, repeat the recipe for qwen3-coder:30b (pick a larger num_ctx — 32768 or 65536 — since the model supports it and the heavy pick deserves the headroom).
+2. **If the num_ctx fix works:** propagate the learning into the harness.
+   1. **Update `scripts/lib/tiers.tsv`** — no reliability changes needed. Optionally add a column or note indicating the required min `num_ctx` per row, or just document it in the row note.
+   2. **Update `config/opencode/*.json` templates** — change each model key from `qwen3:8b` to `qwen3:8b-16k` (and similar for qwen3-coder). Keep the display names intact; only the tag changes.
+   3. **Update `install.sh` Phase 4** — after `ollama pull <tag>`, run a follow-up `ollama run <tag>` with `/set parameter num_ctx <N>` and `/save <tag>-<N>k` to create the high-context variant. Capture `<N>` from a new `num_ctx` column in `tiers.tsv`. The sidecar should record the `-Nk` variant tag, not the base tag.
+   4. **Update `docs/models.md`** with the `num_ctx` finding + the recipe. This is important information; future readers will hit the same wall otherwise.
+   5. **Remove / soften the Critical reminder** about `tiers.tsv` being unverified for agentic use — it's now verified (and the fix ships with the new install.sh).
+   6. Commit each step as its own chunk.
+3. **If the num_ctx fix does NOT work:** the theory is wrong, and the original session-#04 plan applies — audit the registry (demote Qwen rows to `watching`) and hunt for alternatives. Candidates ranked from session-#03 research:
+   - **Devstral** (`devstral:latest`) — agentic SWE-bench leader, software-engineering-tuned, reported stable tool calling. Strongest candidate.
+   - **Gemma 4 26B** — native function calling, different family entirely. Check whether the 4B tool-calling bug (known from session #01) still applies to the 26B variant.
+   - **GLM-4.7** via Ollama Cloud (`glm-4.7:cloud`) — requires Ollama Cloud auth (blocks on the existing open thread). Likely works because the OpenCode Zen cloud control worked in session #03.
+   - **DeepSeek-Coder-V2** — strong reasoning + tool use per community reports, large download.
+   - **Qwen3-Coder-Next 80B** (MoE, ~3B active) — currently `watching`; probably too large for M3 Air's 24GB but worth noting for the 32GB+ tiers.
+4. **Test the winner** (whichever path): interactive TUI + `opencode run` headless + the README prompt. All three should produce `SUMMARY.md`. Time each.
+5. **File upstream minimal repro** (if time) on the num_ctx or tool-schema issue — whichever the root cause turns out to be. Belongs on the ollama repo with opencode cross-reference.
+6. **Commit in logical chunks.**
 
-Out of scope for #04: M1 Air test, PC/Windows, install-macos.md rewrite, status.sh, LAN flow.
+Out of scope for #04: M1 Air test, PC/Windows, install-macos.md rewrite, status.sh, LAN flow, Ollama Cloud auth setup (unless step 3 requires it).
 
 **Conditional branches**:
-- If a non-Qwen local model works → that becomes the recommended daily driver, push M1 Air to session #05 with the new pick.
-- If only `:cloud` models work → etude's positioning shifts. "Local-first, cloud-fallback" becomes "cloud-first where local is broken, local where it works." The docs and tier table need that reframing.
-- If *nothing* works → pause the hardware rollouts entirely. Investigate the upstream bug as the critical path. Session #05 becomes "fix or wait for upstream."
-- If the Qwen bug turns out to be configurable-away (e.g., a different model template, a specific ollama flag, an opencode provider tweak) → undo the P1 demotions and the panic, but keep the audit as a discipline.
+- **num_ctx theory holds** → this is the best outcome. Most of session #04 becomes mechanical cleanup. M1 Air rollout can proceed to session #05 as originally planned (just with the new `-Nk` tags).
+- **num_ctx theory partially holds** (e.g., fixes qwen3:8b but not qwen3-coder:30b) → we have a daily driver for mac-air-24gb and a gap for the heavy pick. Note both and continue hunt for a heavy alternative.
+- **num_ctx theory doesn't hold** → fall back to the alternative-model hunt in step 3. M1 Air stays queued for session #05+ with whatever the winning model is.
+- **Nothing works locally** → cloud-first positioning, Ollama Cloud auth becomes P1 for session #05. Session #04 ends by filing the upstream bug and documenting what was tried.
 
 ### Parking lot (out of scope for now)
 
@@ -166,7 +181,8 @@ Out of scope for #04: M1 Air test, PC/Windows, install-macos.md rewrite, status.
 - **Deferred from #03:** `docs/install-macos.md` rewrite. The prose is 133 lines of outdated brew-formula speculation and needs a careful rework, not rushed. Only the tag references were patched this session; structural rewrite is P2.
 - **Not tested:** the fresh `brew install --cask ollama` branch of Phase 4 — M3 Air already had Ollama.app from a direct download. First genuinely-fresh-machine session is the target for that.
 - **Heavy model (qwen3-coder:30b) comparison — resolved, negative result.** Same prompt, 55 seconds, 4.2K tokens, one tool call attempted then abandoned. The model called a non-existent `Skill "read_file"` (opencode has no `Skill` family; the actual tool is `Read` with a `filePath` param), got `Skill 'read_file' not found`, apologized, and asked the user to clarify the task. **Different hallucination, same underlying failure as qwen3:8b**: neither Qwen model is reading opencode's actual tool schema. Big Pickle (cloud control) worked correctly in the same install in 8 seconds. The bug is in the ollama → opencode → Qwen tool-schema translation layer, not the model size.
-- **Implication: most of `tiers.tsv`'s agentic recommendations are factually wrong.** Every Qwen row registered as `reliability = good` is now known-broken for tool calling, which is every Mac tier and every GPU tier. Text generation still works — Level 5 smoke test still passes, `opencode run "reply with X"` still works — but agentic use (tool calling) does not. The registry audit is session #04's P1.
+- **Implication: most of `tiers.tsv`'s agentic recommendations are factually unverified.** Every Qwen row registered as `reliability = good` failed the tool-calling test. Text generation still works — Level 5 smoke test still passes, `opencode run "reply with X"` still works — but agentic use (tool calling) does not. The registry audit is session #04's P1.
+- **Post-session research (2026-04-13 late) found the likely root cause: `num_ctx` default of 4096.** A community guide (`p-lemonish/ollama-x-opencode`) and the opencode docs both call this out: ollama loads every model with a 4K context window by default regardless of what the model's max supports, and opencode's `limit.context` config is send-side only — it doesn't override ollama's receive-side `num_ctx`. Tool-definition prompts are large (agent system prompt + tool schemas + user message often >>4K), and when truncated to 4K the tool schema is the first thing to get chopped. The model then sees a prompt that doesn't mention tools at all, so it fills in plausible-sounding tool names from training memory. The fix is to bake a larger `num_ctx` into a model variant (`ollama run qwen3:8b` → `/set parameter num_ctx 16384` → `/save qwen3:8b-16k`) and reference the variant tag in `opencode.json`. Session #04 P1 tests this theory first, which — if it holds — collapses the "registry reliability audit + working-model hunt" into a ~10-minute config fix instead of a model-family pivot. If the theory doesn't hold, fall back to alternative models (Devstral, GLM-4.7, Gemma 4 26B, qwen3-coder-next:80b) found in the same research pass.
 
 ### Session #02 — Install harness (2026-04-12)
 - Architectural pivot: etude was "recipe book + detection script," now it's "guided installer with a single source of truth." Driven by end-user walkthrough — there was no install mechanism, just prose.
