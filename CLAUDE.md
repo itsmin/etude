@@ -2,7 +2,7 @@
 
 Project: **etude** — an install kit and docs for running a Claude Code-like coding agent on open-weight models. Three tiers: local, LAN peer, Ollama Cloud.
 
-**Status**: Scaffold + install harness. `install.sh` runs end-to-end in dry mode on the author's M3 Air. Nothing has been installed against real hardware yet — session #03 is the first real run. Two machine profiles are the author's primary targets — MacBook Air M3 (24GB) and a desktop with Ryzen 7 5800X + RTX 5080 16GB. Other tiers have registry entries and config templates but are all unverified.
+**Status**: Harness verified end-to-end on the M3 Air. First real install complete in configured mode (qwen3:8b pulled, opencode 1.4.3 installed), all 5 smoke-test levels pass including Level 5 (opencode → ollama-local/qwen3:8b). Session #03 produced an architectural pivot: macOS install now routes through the Ollama.app cask (not the brew formula) and defaults to configured mode (not bare). Next up — second-machine verification on the M1 Air 16GB (mac-light tier, fresh cask install). Other tiers still unverified.
 
 ---
 
@@ -20,7 +20,8 @@ Project: **etude** — an install kit and docs for running a Claude Code-like co
 
 ## Critical reminders
 
-*(none yet)*
+- **macOS install path is Ollama.app cask, not brew formula.** The brew formula (`brew install ollama`) lags the Ollama.app and may ship without the `launch` subcommand; on a machine with both installed, the formula's old client typically intercepts calls to the newer server. `install.sh` Phase 1 refuses to proceed if it detects either condition (multi-binary PATH conflict, client/server mismatch warning, or missing `launch`). The fix is always `brew uninstall ollama`; Ollama.app survives.
+- **Bare vs configured is interactive-vs-scriptable, not light-vs-full.** Bare mode relies on `ollama launch opencode` which needs a TTY. Configured mode writes `opencode.json` with an `ollama-local` provider (via `@ai-sdk/openai-compatible` → `localhost:11434/v1`) and works both in the opencode TUI and in `opencode run` headless mode. Configured is the default; bare is an opt-in for users who really don't want a config file.
 
 ---
 
@@ -53,28 +54,30 @@ If this session touched any of these, the matching follow-up applies:
 
 ## Pending verifications
 
-Session #02 shifted from "verify prose" to "build harness." The harness (`install.sh`, `scripts/lib/tiers.*`, `scripts/test.sh`) replaces the prose as the thing to verify, and it's been exercised in dry mode on the M3 Air but has not yet installed anything.
+Session #03 verified the full harness end-to-end on the M3 Air. Most session-#02 items are now real.
 
-Partial (verified in-session on the M3 Air in dry mode):
-- `scripts/detect-tier.sh` — all three modes (`--tier-only`, `--json`, human) return correct output for this machine
-- `scripts/lib/tiers.sh` — registry parsing, consistency check, installable check all work
-- `install.sh` Phase 1 preflight — correctly validates registry, deps, homebrew, write perms, network
-- `install.sh` Phase 2 detection + Phase 3 picker + plan + disk check — full path works, non-interactive mode clean
-- `install.sh` Phase 4 execute + Phase 5 smoke test — dry-run path works, side-effecting commands NOT executed
-- `scripts/test.sh` Levels 1–2 — partial real verification: ollama 0.20.5 detected, version check passes, daemon check ready
+Verified in session #03 (M3 Air, real run):
+- `install.sh` Phase 1 sanity detection — fires correctly on a broken state (brew formula 0.12.0 + Ollama.app 0.20.5 coexisting), passes cleanly after `brew uninstall ollama`.
+- `install.sh` Phase 3 dep detection — reports "Ollama.app <ver> (already installed)" based on the Phase-1-validated binary.
+- `install.sh` Phase 4 opencode install — `curl | bash` via `opencode.ai/install` lands the binary at `~/.opencode/bin/opencode` and appends PATH to `~/.zshrc`. Phase 4 now propagates PATH into the current process so Phase 5 sees opencode.
+- `install.sh` Phase 4 `ollama pull qwen3:8b` — works, idempotent (second run re-verifies manifest, no re-download).
+- `install.sh` Phase 4 configured-mode opencode.json write — handles existing-file case (default backup+write; leaves `opencode.json.bak.<timestamp>` behind).
+- `install.sh` Phase 4 sidecar write — new build layout doesn't leave a blank line inside `ETUDE_MODELS` when heavy is empty.
+- `install.sh` Phase 5 → `test.sh` — all 5 levels pass end-to-end in configured mode.
+- `test.sh` Level 5 — `opencode run` against `ollama-local/qwen3:8b` with a marker prompt; qwen3:8b returns the marker in the completion text.
+- Real artifacts on disk: `~/.opencode/bin/opencode` (1.4.3), `~/.config/opencode/opencode.json` (from `config/opencode/mac-air-24gb.json`), `~/.config/etude/install.sh` (sidecar, mode=configured).
 
-Still fully unverified (needs real-hardware session #03):
-- Actual `brew install ollama` + daemon start on a machine that doesn't already have it
-- Actual `curl -fsSL https://opencode.ai/install | bash` — does opencode land on PATH?
-- Actual `ollama pull` against the picked models
-- Actual opencode startup with a written config
-- `ollama launch opencode --model X` — the "bare mode" happy path
-- `test.sh` Levels 3–5 (sidecar read, inference check, opencode one-shot stub)
-- All tiers other than `mac-air-24gb` — everything else is registry entry + config template without a real run
-- `install-windows.md` — entire Windows path
-- LAN-serve flow (Air → desktop Ollama)
+Still unverified:
+- **Fresh `brew install --cask ollama` branch of Phase 4.** Session #03 couldn't exercise it — Ollama.app was already on the M3 Air (downloaded directly, not via cask). First machine without Ollama.app is the target.
+- **Daemon auto-start after a fresh cask install.** Currently `open -a Ollama` with `sleep 2` retry, untested against a cold machine.
+- **All tiers other than mac-air-24gb.** `mac-light`, `mac-pro-32gb`, `mac-heavy-64gb`, `mac-max`, and every `gpu-*` tier are still registry entries + config templates without a real run.
+- **`install-windows.md`** — entire Windows path, entirely unverified.
+- **LAN-serve flow** (Air → desktop Ollama, or vice versa).
+- **Ollama Cloud auth / `:cloud` model pull** — see open threads.
+- **`install-macos.md` prose** — deferred from session #03, needs a full rewrite to match the harness (currently documents the old brew-formula path).
 
-The install-doc prose (`install-macos.md`, `install-windows.md`) is now **behind** the install script. Session #03 will rewrite the prose to match what actually happens during the real run, not what session #01 speculated.
+New in-session-#03 finding that's still open:
+- **qwen3:8b tool-calling reliability via opencode.** Level 5 smoke test (text generation) passes reliably. Two real-task tests ("write a debounce hook with tests", "use the write tool to create ./hello.txt with contents: hello from etude") both failed to invoke the write tool — the model either returned nothing visible or asked for parameters the prompt already provided. Plumbing works; agentic tool-calling is unreliable on qwen3:8b. Needs comparison against qwen3-coder:30b-a3b before we can tell if it's a model-size issue or a prompt/agent-config issue. Not a harness bug.
 
 ---
 
@@ -82,40 +85,39 @@ The install-doc prose (`install-macos.md`, `install-windows.md`) is now **behind
 
 ### P1 (active)
 
-**Session #03 — first real-hardware run (M3 Air).** The harness exists and passes dry-mode checks. Now actually run it against this M3 Air with nothing pre-installed — or with opencode pre-installed to test that path. Walk through the flow, note every moment the script got something wrong, fix the script. End with opencode running a real task against a locally-pulled qwen3:8b. Full plan below.
+**Session #04 — M1 Air 16GB first install.** First session against a genuinely fresh machine — Ollama.app not installed, opencode not installed, brew present. Exercises the `brew install --cask ollama` branch of Phase 4 that session #03 couldn't test (M3 Air already had Ollama.app). Tests the `mac-light` tier for the first time. Validates the harness generalizes across Mac variants. Full plan below.
 
 ### P2 (next up)
 
-- Session #04: first real-hardware run on the M1 Air 16GB (second machine, mac-light tier, validates that the architecture generalizes across machines)
 - Session #05: first real-hardware run on the RTX 5080 PC (gpu-16gb tier, Windows install path)
-- Wire up `test.sh` Level 5 (opencode one-shot) after the M3 run confirms opencode's non-interactive CLI
-- Build `scripts/status.sh` — read-only audit tool. Reads sidecar + TSV + `ollama list` + `ollama show`, reports drift between intended and actual state. Complements `test.sh` (test is functional, status is inventory). Depends on session #03 having written a real sidecar.
-- Build `install.sh --refresh` mode — detect existing sidecar at startup, compare to current TSV, offer to pull delta and rewrite config. Same entry point, different mode. Depends on session #03 having produced the first real sidecar.
+- Rewrite `docs/install-macos.md` to match the harness — delete the speculative brew-formula prose, replace with "run `./install.sh`, here's what it does, here's what to watch for." Deferred from session #03. Should happen after session #04 confirms the harness across two Macs.
+- Build `scripts/status.sh` — read-only audit tool. Reads sidecar + TSV + `ollama list` + `ollama show`, reports drift between intended and actual state. Complements `test.sh` (test is functional, status is inventory). Session #03 produced the first real sidecar, so this is now buildable.
+- Build `install.sh --refresh` mode — detect existing sidecar at startup, compare to current TSV, offer to pull delta and rewrite config. Same entry point, different mode.
 - `status.sh --check-updates` — single network call to fetch origin `tiers.tsv` and diff against local. Opt-in, not in `install.sh`. Build alongside `status.sh`.
+- **Tool-calling comparison across models.** Session #03's finding was qwen3:8b didn't reliably invoke write tools via opencode. Worth a focused session to test qwen3-coder:30b-a3b (heavy mode) and compare, plus check opencode's default agent config for whether it's tool-ready by default.
 - Flesh out `docs/usage.md` — day-to-day patterns, mode switching, real examples
 - Capture real latency numbers for the LAN-serve flow (Air → desktop)
-- Rewrite `install-macos.md` and `install-windows.md` to match what the harness actually does; add source-of-truth pointers in `hardware-tiers.md` and `models.md` that direct readers to `scripts/lib/tiers.tsv`
+- Rewrite `install-windows.md` alongside the PC session
 - Watch the Gemma 4 E4B tool-calling bug; flip its `reliability` from `watching` to `good` in `tiers.tsv` once fixed upstream
 
 ### Upcoming sessions
 
-**Session #03 — first real-hardware run on the M3 Air**:
+**Session #04 — M1 Air 16GB first install**
 
-1. **Decide starting state.** Either uninstall opencode first for a "truly fresh" test, or run `./install.sh` against the current state (ollama 0.20.5 present, opencode missing) and accept that the "fresh ollama install" branch stays unverified for now. Lean toward the second — faster, still exercises the interesting parts.
-2. **Run `./install.sh --plan`** and walk through it interactively. Every prompt, every default. Note anything confusing.
-3. **Run `./install.sh` for real** in bare mode, picking qwen3:8b only (skip heavy to keep it fast). Watch every step. First real test of: `brew install ollama` (already installed, so skip check), `curl | bash` for opencode + PATH handling, `ollama pull qwen3:8b`, sidecar write.
-4. **Run `./scripts/test.sh`** against the fresh install. Levels 1–4 should all pass. Note anything that surprises you.
-5. **Run the actual happy path.** `cd` into some real project, `ollama launch opencode --model qwen3:8b`, give it a real task (e.g. "write a debounce hook with tests"). Observe: does it work? Does tool calling reliably land? What's the latency? Capture anything worth noting.
-6. **Wire up `test.sh` Level 5.** Based on what you learned about opencode's CLI, implement the one-shot file-write test. Run the full test suite end-to-end.
-7. **Rewrite `install-macos.md`** to match what actually happened. The old prose is now stale — replace with "run `./install.sh`, here's what to expect, here are the moments to watch for."
-8. **Commit in logical chunks** as you go. Don't batch everything into one commit.
+1. **Verify starting state.** Confirm M1 Air has: no Ollama.app, no opencode, brew present, disk has ≥10GB free. Run the project-specific health check (Project health checks subsection above). Document baseline.
+2. **Run `./install.sh --plan`** interactively. Walk every prompt. Tier should auto-detect as `mac-light`. Mode default should be `configured`. Note anything confusing — the M1 Air user is a fresh reader of the new harness, not someone who's been hacking on it for a session.
+3. **Run `./install.sh`** for real. This is the first session that exercises the full "install Ollama.app from nothing" branch — `brew install --cask ollama` will actually run. Watch for: whether brew prompts for sudo on /Applications writes, how Phase 4's `open -a Ollama` behaves on a cold install (macOS may show the "are you sure you want to open this app from the internet" dialog on first launch), and whether daemon auto-start works or needs human intervention.
+4. **Run `./scripts/test.sh`** — Levels 1–5 should pass. If any fail, fix before moving on.
+5. **Tool-calling spot-check.** Repeat the session #03 "write a file" test with `mac-light`'s daily model (first check `scripts/lib/tiers.tsv` for what that is — may be `qwen3:4b`). Compare to the session #03 qwen3:8b observation. A smaller model failing is expected and informative; a smaller model succeeding is surprising and informative.
+6. **Commit in logical chunks** as you go.
 
-Out of scope for #03: M1 Air run, Windows, LAN flow, `status.sh`, Ollama Cloud auth. Keep session scoped to "one machine, one run, fix what's wrong."
+Out of scope for #04: PC/Windows, install-macos.md rewrite, status.sh, Ollama Cloud, LAN flow.
 
 **Conditional branches**:
-- If `ollama launch opencode` doesn't work as researched, `bare` mode is broken and we fall back to `configured` mode as the sole happy path. That's a real architectural change — update the installer.
-- If opencode's curl-bash doesn't land it on PATH cleanly, Phase 4 needs a post-install PATH check and a shell-rc edit (or instruction).
-- If `test.sh` Level 4 inference is slower than ~15s, bump the timeout expectation or use a smaller test prompt.
+- If `brew install --cask ollama` requires sudo interactively → document, consider whether `install.sh` can detect and warn upfront.
+- If the M1 Air thrashes during qwen3:4b inference → mac-light's daily pick may be wrong; adjust `tiers.tsv`.
+- If Level 5 fails against mac-light's daily → that tier may be unviable for headless use; note in registry and adjust expectations, don't chase the model.
+- If everything works cleanly on the first run → great signal that the session #03 architectural changes generalize; accelerate session #05 planning.
 
 ### Parking lot (out of scope for now)
 
@@ -128,14 +130,27 @@ Out of scope for #03: M1 Air run, Windows, LAN flow, `status.sh`, Ollama Cloud a
 
 ### Open threads (carry forward)
 
-- **Ollama Cloud auth / pricing mechanics.** Not yet explored — sign up flow, key storage, which `:cloud` models are currently hosted. Decide whether to resolve in a real session (actually pull a `:cloud` model) or park until needed.
+- **qwen3:8b tool-calling reliability via opencode.** Session #03 observation on M3 Air: two "write a file" prompts failed to invoke the write tool (first attempt produced no visible response; second attempt asked for parameters the prompt already specified). Text generation via `opencode run` works reliably — Level 5 smoke passes. Plumbing is not the problem. Worth comparing against qwen3-coder:30b-a3b and inspecting opencode's default agent / system prompt. Might just be that smaller open-weight models need more hand-holding, or opencode's default agent isn't configured for local-model tool use.
+- **Ollama Cloud auth / pricing mechanics.** Still not explored. Interesting note: the M3 Air `ollama list` shows `gpt-oss:20b-cloud` from "2 weeks ago" — the author has touched Ollama Cloud at some point but the context is lost. Sign-up flow, key storage, current `:cloud` model catalogue all still unknown. Parked until a session needs it.
 - **Windows install doc ordering.** The doc currently defaults to fully-native Windows with WSL2 as the advanced path. Since the PC doubles as a LAN inference server, WSL2-for-opencode + native-Ollama may be the better anchor. Revisit when verifying `install-windows.md`.
+- **`gpt-oss:20b` stale model on M3 Air.** 13GB, pulled 7 months ago, no clear reason to keep around. Could be cleared to reclaim disk, but not blocking anything. `status.sh` (once built) should probably surface "models on disk that aren't in your sidecar" as a tidy-up signal.
 
 ### Deferred (in scope, bumped)
 
 *(none yet)*
 
 ### Complete (recent)
+
+### Session #03 — First real install + architectural pivot (2026-04-13)
+- **Architectural pivot: macOS install path from brew formula to Ollama.app cask.** Real hardware surfaced three failure modes the dry-run harness never saw: multi-binary PATH conflict (brew formula 0.12.0 + Ollama.app 0.20.5 coexisting on the same machine), silent false-positive version parser (server version extracted from a client/server mismatch warning), and brew formula lacks the `launch` subcommand required for bare mode. Phase 1 now refuses to proceed on any of these with specific remediation. Phase 4 uses `brew install --cask ollama` when needed.
+- **Architectural pivot: mode default from bare to configured.** Session #03 established that bare mode only works interactively — `ollama launch opencode` needs a TTY, and `opencode run` (headless) requires a provider in `opencode.json` that bare mode doesn't write. Configured is now the default; bare stays available as an opt-in for users who really don't want a config file. Implication recorded in Critical reminders.
+- **Wired test.sh Level 5.** `opencode run` against `ollama-local/<daily-tag>` with a unique marker prompt; passes if the response contains the marker. Skips with explanation in bare mode. Verified passing on M3 Air with qwen3:8b.
+- **Smaller fixes:** picker default for optional roles is now "skip" not "pick first" (makes `--non-interactive` usable for minimal installs); sidecar build no longer leaves a blank line inside `ETUDE_MODELS`; Phase 4 propagates `~/.opencode/bin` into the current process PATH so Phase 5's test.sh sees opencode.
+- **Verified end-to-end** on M3 Air: install.sh full path, all 5 smoke test levels pass, `opencode run → ollama-local/qwen3:8b → text response` confirmed.
+- **Finding (open thread):** qwen3:8b's tool-calling via opencode is unreliable on the first turn — two "write a file" tests failed to invoke the write tool. Text generation works; agentic tool use needs investigation against qwen3-coder:30b-a3b and opencode's default agent config.
+- **Deferred from #03:** `docs/install-macos.md` rewrite. The prose is extensive (133 lines of brew-formula speculation) and needs a careful rework, not rushed. Requeued to P2 for after session #04 confirms the harness across two Macs.
+- **Not tested:** the fresh `brew install --cask ollama` branch of Phase 4 — M3 Air already had Ollama.app from a direct download. First genuinely-fresh-machine session is the target for that.
+- 6 commits: install.sh cask pivot, test.sh mirror detection, picker default fix, install.sh mode default + sidecar fix, test.sh Level 5 wiring, plus the earlier session-command housekeeping commit.
 
 ### Session #02 — Install harness (2026-04-12)
 - Architectural pivot: etude was "recipe book + detection script," now it's "guided installer with a single source of truth." Driven by end-user walkthrough — there was no install mechanism, just prose.
