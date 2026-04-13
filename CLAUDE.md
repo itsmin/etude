@@ -26,9 +26,28 @@ Project: **etude** — an install kit and docs for running a Claude Code-like co
 
 ## Session workflow
 
-- **Start**: `/session-start` — reads this doc, health-checks `ollama` + `opencode` if present, surfaces the Next pointer.
-- **End**: `/session-end` — drafts session entry from context, verifies features by evidence, updates the work queue. Always gets confirmation before writing the Next pointer.
+- **Start**: `/session-start` (Overture skill) — reads this doc, then runs the project-specific checks below.
+- **End**: `/session-end` (Overture skill) — drafts session entry from context, verifies features by evidence, updates the work queue. Always gets confirmation before writing the Next pointer.
 - **Session entries**: max 8 lines, condensed format. No prose summaries.
+
+### Project health checks (session-start, Step 2)
+
+Run these and report — don't auto-fix. Present as "found these, here's what it means."
+
+- `ollama --version` — is it 0.20.2+?
+- `ollama list` — are the expected models pulled (qwen3:8b, qwen3-coder:30b-a3b)?
+- `opencode --version` — is the harness available?
+
+### Documentation sync checklist (session-end, Step 5)
+
+If this session touched any of these, the matching follow-up applies:
+
+- `docs/hardware-tiers.md` or `docs/models.md` → does the `Last reviewed` date need bumping?
+- `config/opencode/*.json` → do all documented tiers still have a matching template?
+- `scripts/detect-tier.sh` or `scripts/lib/tiers.*` → does it still handle all registered tiers?
+- `scripts/install.sh` or `scripts/test.sh` → has the change been exercised at least in dry mode?
+- `README.md` → is the quick start still accurate?
+- `docs/install-*.md` → have the steps actually been verified on a real machine, or is the prose drifting ahead of the harness again?
 
 ---
 
