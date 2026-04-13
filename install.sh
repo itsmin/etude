@@ -391,20 +391,31 @@ phase3_plan() {
     TOTAL_PULL_GB=$(awk -v a="$TOTAL_PULL_GB" -v b="$size_gb" 'BEGIN {print a + b}')
   done
 
-  # Pick mode: bare (ollama launch) vs configured (write opencode.json)
+  # Pick mode: configured (opencode.json + works headless) vs bare
+  # (interactive only). Session #03 established that bare mode can't be
+  # verified by test.sh because `opencode run` needs a provider in
+  # opencode.json — the 'ollama launch opencode' wrapper that bare mode
+  # relies on only sets up the provider at TTY-launch time. So configured
+  # is the capable default; bare is the quick-start for users who really
+  # don't want a config file.
   echo
   info "two finish modes:"
-  info "  bare        — pull models, leave opencode stock. run: ollama launch opencode --model <tag>"
-  info "  configured  — also write an opencode.json so /models flips between picks mid-session"
+  info "  configured  — write opencode.json with an 'ollama-local' provider."
+  info "                works both interactively (opencode) and headlessly"
+  info "                (opencode run ... -m ollama-local/<tag>)."
+  info "                /models flips between picks mid-session. recommended."
+  info "  bare        — leave opencode stock. launch via 'ollama launch"
+  info "                opencode --model <tag>' interactively only —"
+  info "                headless 'opencode run' won't work without config."
   if [ -n "$MODE_OVERRIDE" ]; then
     CHOSEN_MODE="$MODE_OVERRIDE"
   else
     local answer
-    answer=$(ask "mode" "bare")
+    answer=$(ask "mode" "configured")
     case "$answer" in
       bare|b) CHOSEN_MODE="bare" ;;
       configured|c) CHOSEN_MODE="configured" ;;
-      *) warn "unrecognized mode, defaulting to bare"; CHOSEN_MODE="bare" ;;
+      *) warn "unrecognized mode, defaulting to configured"; CHOSEN_MODE="configured" ;;
     esac
   fi
 
@@ -561,6 +572,16 @@ write_sidecar() {
 }
 
 build_sidecar_contents() {
+  local models_list=""
+  if [ -n "$CHOSEN_DAILY" ]; then
+    models_list="  \"$CHOSEN_DAILY:daily\""
+  fi
+  if [ -n "$CHOSEN_HEAVY" ]; then
+    [ -n "$models_list" ] && models_list+=$'\n'
+    models_list+="  \"$CHOSEN_HEAVY:heavy\""
+  fi
+  local cfg_path=""
+  [ "$CHOSEN_MODE" = "configured" ] && cfg_path="$OPENCODE_CONFIG_PATH"
   cat <<EOF
 # etude — install sidecar (bash-sourceable)
 # Written by install.sh. Safe to read, edit only if you know what you're doing.
@@ -568,10 +589,9 @@ ETUDE_TIER="$CHOSEN_TIER"
 ETUDE_TSV_LAST_REVIEWED="$(tiers_last_reviewed)"
 ETUDE_INSTALLED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ETUDE_MODE="$CHOSEN_MODE"
-ETUDE_OPENCODE_CONFIG_PATH="$([ "$CHOSEN_MODE" = "configured" ] && echo "$OPENCODE_CONFIG_PATH" || echo "")"
+ETUDE_OPENCODE_CONFIG_PATH="$cfg_path"
 ETUDE_MODELS=(
-$([ -n "$CHOSEN_DAILY" ] && echo "  \"$CHOSEN_DAILY:daily\"")
-$([ -n "$CHOSEN_HEAVY" ] && echo "  \"$CHOSEN_HEAVY:heavy\"")
+$models_list
 )
 EOF
 }
