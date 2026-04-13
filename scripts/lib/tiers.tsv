@@ -29,15 +29,15 @@ mac-light       | qwen3:4b             | 2.4     | 16384   | good        | daily
 mac-light       | qwen3:8b             | 5.2     | 16384   | good        | heavy | Better code, more reliable tool calls, slower. Close your browser before heavy sessions on 16GB.
 mac-light       | gemma4:e4b           | 5.6     | 16384   | watching    | —     | Capable chat model but tool calling regresses in Ollama 0.20.x. Promote to daily once fixed upstream.
 mac-air-24gb    | qwen3:8b             | 5.2     | 32768   | good        | daily | Author's daily driver on M3 Air 24GB. Comfortable with a browser open.
-mac-air-24gb    | qwen3-coder:30b-a3b  | 17.0    | 32768   | good        | heavy | MoE with ~3B active per token. Close the browser, focused session only — fanless Air will thermal-bind.
+mac-air-24gb    | qwen3-coder:30b      | 19.0    |32768   | good        | heavy | MoE with ~3B active per token. Close the browser, focused session only — fanless Air will thermal-bind.
 mac-air-24gb    | gemma4:e4b           | 5.6     | 32768   | watching    | —     | See mac-light row. Watch this for promotion.
-mac-pro-32gb    | qwen3-coder:30b-a3b  | 17.0    | 65536   | good        | daily | MLX backend activates at 32GB (Ollama 0.19+). This is the sweet-spot tier.
-mac-heavy-64gb  | qwen3-coder:30b-a3b  | 17.0    | 65536   | good        | daily | Same model, much more headroom for context and other apps.
+mac-pro-32gb    | qwen3-coder:30b      | 19.0    |65536   | good        | daily | MLX backend activates at 32GB (Ollama 0.19+). This is the sweet-spot tier.
+mac-heavy-64gb  | qwen3-coder:30b      | 19.0    |65536   | good        | daily | Same model, much more headroom for context and other apps.
 mac-heavy-64gb  | qwen3-coder-next:80b | 46.0    | 65536   | watching    | heavy | Larger MoE. Unverified on this tier as of last review.
 mac-max         | qwen3-coder-next:80b | 46.0    | 131072  | watching    | daily | Top of what "local-only" means. Unverified.
 gpu-light       | qwen3:8b             | 5.2     | 32768   | good        | daily | Fits comfortably in 12GB VRAM. Tight on context above 16K.
-gpu-16gb        | qwen3-coder:30b-a3b  | 17.0    | 32768   | good        | daily | Partial offload to system RAM — MoE makes it tolerable. Author's RTX 5080 daily driver.
+gpu-16gb        | qwen3-coder:30b      | 19.0    |32768   | good        | daily | Partial offload to system RAM — MoE makes it tolerable. Author's RTX 5080 daily driver.
 gpu-16gb        | qwen3:8b             | 5.2     | 32768   | good        | speed | Speed mode, full VRAM at Q8 (~8.5GB). Pick this when you want snappy turnaround.
-gpu-24gb        | qwen3-coder:30b-a3b  | 17.0    | 65536   | good        | daily | Fits comfortably in VRAM. Room for longer context than gpu-16gb.
+gpu-24gb        | qwen3-coder:30b      | 19.0    |65536   | good        | daily | Fits comfortably in VRAM. Room for longer context than gpu-16gb.
 gpu-24gb        | qwen3:32b            | 20.0    | 32768   | watching    | alt   | Dense alternative. Unverified.
 gpu-heavy       | qwen3:32b            | 20.0    | 65536   | watching    | daily | Dense 32B or larger MoE. Workstation territory. Unverified.

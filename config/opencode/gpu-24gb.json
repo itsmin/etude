@@ -8,7 +8,7 @@
         "baseURL": "http://localhost:11434/v1"
       },
       "models": {
-        "qwen3-coder:30b-a3b": {
+        "qwen3-coder:30b": {
           "name": "Qwen3-Coder 30B-A3B (daily, full VRAM)",
           "tools": true,
           "limit": { "context": 65536, "output": 8192 }

@@ -37,7 +37,7 @@
         "baseURL": "http://desktop.local:11434/v1"
       },
       "models": {
-        "qwen3-coder:30b-a3b": {
+        "qwen3-coder:30b": {
           "name": "Qwen3-Coder 30B (LAN peer)",
           "tools": true,
           "limit": { "context": 32768, "output": 8192 }

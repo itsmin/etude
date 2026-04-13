@@ -35,13 +35,13 @@ Require **v0.20.2 or later**. Earlier versions have tool-calling bugs with curre
 For a 24GB Air (the author's reference machine), pull both:
 
 ```bash
-ollama pull qwen3:8b              # daily driver, ~5.2GB
-ollama pull qwen3-coder:30b-a3b   # heavy mode, ~17GB
+ollama pull qwen3:8b         # daily driver, ~5.2GB
+ollama pull qwen3-coder:30b  # heavy mode, ~19GB
 ```
 
 For a 16GB Mac, skip the 30B — pull `qwen3:8b` only.
 
-For a 32GB+ Mac (MLX backend activates), you can make `qwen3-coder:30b-a3b` your daily driver instead.
+For a 32GB+ Mac (MLX backend activates), you can make `qwen3-coder:30b` your daily driver instead.
 
 ## Step 3 — Keep models loaded (optional)
 
@@ -52,7 +52,7 @@ echo 'export OLLAMA_KEEP_ALIVE="-1"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-**Warning for 24GB and under.** Keeping `qwen3-coder:30b-a3b` pinned holds ~17GB. That's most of your machine. If you're doing anything else — browser, Xcode, screen share — let it unload. Only pin the 8B.
+**Warning for 24GB and under.** Keeping `qwen3-coder:30b` pinned holds ~19GB. That's most of your machine. If you're doing anything else — browser, Xcode, screen share — let it unload. Only pin the 8B.
 
 To pin only the 8B, skip the env var and keep `qwen3:8b` warm via `ollama run qwen3:8b` between sessions.
 
@@ -86,7 +86,7 @@ opencode starts with Qwen3 8B selected. Tab switches between Build mode (full to
 
 For heavy mode:
 ```bash
-ollama launch opencode --model qwen3-coder:30b-a3b
+ollama launch opencode --model qwen3-coder:30b
 ```
 
 **This is the daily happy path.** Steps 6 and 7 are only if you want the multi-provider config for fast switching, LAN routing, or Ollama Cloud.

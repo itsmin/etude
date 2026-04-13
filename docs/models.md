@@ -14,8 +14,9 @@ Current picks, why they're picked, and how to swap them. Open-weight models move
 - Tool calling through Ollama + opencode: **reliable**
 - Use for: opencode daily driver on 16–24GB Macs
 
-**Qwen3-Coder 30B-A3B** (`qwen3-coder:30b-a3b`)
-- ~17GB at Q4. MoE: 30B total, 3B active per token. 6+ tok/s even under partial offload.
+**Qwen3-Coder 30B** (`qwen3-coder:30b`)
+- ~19GB at Q4. MoE: 30B total, ~3.3B active per token. 6+ tok/s even under partial offload.
+- Note: session #01 registered this as `qwen3-coder:30b-a3b` based on the Qwen naming convention; ollama's library uses `qwen3-coder:30b` as the canonical tag and the `-a3b` variant doesn't exist as a separately published tag. Caught and fixed in session #03 by a real `ollama pull` failure.
 - Apache 2.0
 - Tool calling: **reliable**
 - Use for: heavy mode on 24GB Macs, daily driver on 32GB+ Macs or 16GB+ VRAM GPUs

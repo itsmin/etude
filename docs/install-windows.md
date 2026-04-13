@@ -22,13 +22,13 @@ Require **v0.20.2 or later**.
 For a 16GB VRAM GPU (RTX 5080, 4080, 4070 Ti Super):
 
 ```powershell
-ollama pull qwen3-coder:30b-a3b    # daily driver, ~17GB, partial offload
+ollama pull qwen3-coder:30b    # daily driver, ~19GB, partial offload
 ollama pull qwen3:8b               # speed mode, fits entirely in VRAM
 ```
 
 For 12GB VRAM (RTX 4070, 3080 Ti): skip the 30B, use `qwen3:8b` only.
 
-For 24GB VRAM (RTX 4090, 3090): `qwen3-coder:30b-a3b` fits entirely in VRAM with room for context.
+For 24GB VRAM (RTX 4090, 3090): `qwen3-coder:30b` fits entirely in VRAM with room for context.
 
 ### Step 3 — Install opencode
 
@@ -43,7 +43,7 @@ Or — the path I'd recommend if you plan to use this PC as both a client and a 
 
 ```powershell
 cd your-project
-ollama launch opencode --model qwen3-coder:30b-a3b
+ollama launch opencode --model qwen3-coder:30b
 ```
 
 ### Step 5 — Optional: multi-provider config
@@ -89,7 +89,7 @@ Edit `~/.config/opencode/opencode.json` and add a provider entry:
     "baseURL": "http://192.168.1.42:11434/v1"
   },
   "models": {
-    "qwen3-coder:30b-a3b": {
+    "qwen3-coder:30b": {
       "name": "Qwen3-Coder 30B (desktop)",
       "tools": true,
       "limit": { "context": 32768, "output": 8192 }
