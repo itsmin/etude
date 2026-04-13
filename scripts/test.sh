@@ -109,26 +109,43 @@ level1_binaries() {
 
   if ! command -v ollama >/dev/null 2>&1; then
     fail "ollama not found on PATH"
-    note "install it with: brew install ollama  (or curl -fsSL https://ollama.com/install.sh | sh)"
-    return 1
-  fi
-  local ollama_ver
-  ollama_ver=$(ollama --version 2>&1 | awk '/version/ {print $NF; exit} {last=$NF} END {if (last) print last}')
-  if [ -z "$ollama_ver" ]; then
-    fail "could not parse ollama version"
-    return 1
-  fi
-  if version_ge "$ollama_ver" "$OLLAMA_MIN_VERSION"; then
-    pass "ollama $ollama_ver (>= $OLLAMA_MIN_VERSION)"
-  else
-    fail "ollama $ollama_ver is below minimum $OLLAMA_MIN_VERSION"
-    note "upgrade with: brew upgrade ollama"
+    note "install with: brew install --cask ollama  (or download Ollama.app from ollama.com)"
     return 1
   fi
 
+  # Detect the install problems install.sh Phase 1 also catches. test.sh
+  # can be run standalone, so the detection has to live here too.
+  local raw
+  raw=$(ollama --version 2>&1)
+  if echo "$raw" | grep -qi "warning: client version"; then
+    fail "ollama client/server version mismatch"
+    note "raw: $(echo "$raw" | tr '\n' ' ')"
+    note "fix: brew uninstall ollama (removes stale formula), then re-run"
+    return 1
+  fi
+
+  local ollama_ver
+  ollama_ver=$(echo "$raw" | awk '/^ollama version/ {print $NF; exit}')
+  if [ -z "$ollama_ver" ]; then
+    fail "could not parse ollama version"
+    note "raw: $raw"
+    return 1
+  fi
+  if ! version_ge "$ollama_ver" "$OLLAMA_MIN_VERSION"; then
+    fail "ollama $ollama_ver is below minimum $OLLAMA_MIN_VERSION"
+    note "upgrade Ollama.app from its menu bar, or: brew install --cask ollama"
+    return 1
+  fi
+  if ! ollama launch --help >/dev/null 2>&1; then
+    fail "ollama $ollama_ver has no 'launch' subcommand (required for bare mode)"
+    note "upgrade Ollama.app from its menu bar, or: brew install --cask ollama"
+    return 1
+  fi
+  pass "ollama $ollama_ver (>= $OLLAMA_MIN_VERSION, supports launch)"
+
   if ! command -v opencode >/dev/null 2>&1; then
     fail "opencode not found on PATH"
-    note "install it with: curl -fsSL https://opencode.ai/install | bash"
+    note "install with: curl -fsSL https://opencode.ai/install | bash"
     note "then ensure ~/.opencode/bin is on PATH"
     return 1
   fi
