@@ -67,14 +67,16 @@ The install-doc prose (`install-macos.md`, `install-windows.md`) is now **behind
 
 ### P2 (next up)
 
-- Session #04: first real-hardware run on the M1 Air 16GB (second machine, mac-light tier, validates that the architecture generalizes)
+- Session #04: first real-hardware run on the M1 Air 16GB (second machine, mac-light tier, validates that the architecture generalizes across machines)
 - Session #05: first real-hardware run on the RTX 5080 PC (gpu-16gb tier, Windows install path)
 - Wire up `test.sh` Level 5 (opencode one-shot) after the M3 run confirms opencode's non-interactive CLI
-- Build `scripts/status.sh` — read-only audit tool, complements `test.sh`
+- Build `scripts/status.sh` — read-only audit tool. Reads sidecar + TSV + `ollama list` + `ollama show`, reports drift between intended and actual state. Complements `test.sh` (test is functional, status is inventory). Depends on session #03 having written a real sidecar.
+- Build `install.sh --refresh` mode — detect existing sidecar at startup, compare to current TSV, offer to pull delta and rewrite config. Same entry point, different mode. Depends on session #03 having produced the first real sidecar.
+- `status.sh --check-updates` — single network call to fetch origin `tiers.tsv` and diff against local. Opt-in, not in `install.sh`. Build alongside `status.sh`.
 - Flesh out `docs/usage.md` — day-to-day patterns, mode switching, real examples
 - Capture real latency numbers for the LAN-serve flow (Air → desktop)
-- Rewrite `install-macos.md` and `install-windows.md` to match what the harness actually does
-- Watch the Gemma 4 E4B tool-calling bug; flip its `reliability` from `watching` to `good` in `tiers.tsv` once fixed
+- Rewrite `install-macos.md` and `install-windows.md` to match what the harness actually does; add source-of-truth pointers in `hardware-tiers.md` and `models.md` that direct readers to `scripts/lib/tiers.tsv`
+- Watch the Gemma 4 E4B tool-calling bug; flip its `reliability` from `watching` to `good` in `tiers.tsv` once fixed upstream
 
 ### Upcoming sessions
 
@@ -98,6 +100,7 @@ Out of scope for #03: M1 Air run, Windows, LAN flow, `status.sh`, Ollama Cloud a
 
 ### Parking lot (out of scope for now)
 
+- **Dedicated watchlist file** separate from the TSV's `reliability=watching` column. The column handles v1 fine; a separate file only earns its place once there are more than 1–2 tracked entries and we want richer metadata per entry (source URL, trigger condition, last-checked date). Revisit when that happens.
 - Linux-native install guide (generalizable from Windows section but not verified)
 - vLLM path for the PC (faster throughput, more setup)
 - Custom per-project opencode modes or system prompts
