@@ -183,6 +183,58 @@ phase1_preflight() {
     warn "ollama.com unreachable — model pulls will fail"
     if ! confirm "continue anyway?" N; then die "aborted at preflight"; fi
   fi
+
+  # Ollama install sanity — if present, must be a single, modern Ollama.app
+  # binary with the 'launch' subcommand. Phase 4 will install via cask if
+  # missing. Surfaces three real failure modes from the M3 Air session:
+  #   1. Multiple ollama binaries on PATH (brew formula + Ollama.app)
+  #   2. Client/server version mismatch (stale client intercepts newer server)
+  #   3. Ollama too old to have 'launch' (required for bare mode)
+  if command -v ollama >/dev/null 2>&1; then
+    local ollama_paths path_count
+    ollama_paths=$(which -a ollama 2>/dev/null | awk 'NF')
+    path_count=$(printf '%s\n' "$ollama_paths" | awk 'NF' | wc -l | tr -d ' ')
+    if [ "$path_count" -gt 1 ]; then
+      x "multiple ollama binaries on PATH:"
+      printf '%s\n' "$ollama_paths" | awk '{print "      " $0}'
+      info ""
+      info "etude expects a single ollama install (the Ollama.app)."
+      info "the brew formula and .app coexist badly — the formula's old client"
+      info "intercepts calls meant for the .app's newer server."
+      info ""
+      info "fix:"
+      info "  brew uninstall ollama     # removes the stale brew formula"
+      info "  # then re-run this script; Ollama.app stays intact"
+      die "ollama install is ambiguous"
+    fi
+
+    local ollama_raw
+    ollama_raw=$(ollama --version 2>&1)
+    if printf '%s\n' "$ollama_raw" | grep -qi "warning: client version"; then
+      x "ollama client/server version mismatch:"
+      printf '%s\n' "$ollama_raw" | awk '{print "      " $0}'
+      info ""
+      info "a stale ollama client is intercepting calls meant for a newer server."
+      info "fix: brew uninstall ollama, then re-run this script"
+      die "ollama version mismatch"
+    fi
+
+    if ! ollama launch --help >/dev/null 2>&1; then
+      x "ollama lacks the 'launch' subcommand (required for bare mode)"
+      info ""
+      info "the installed ollama is too old. upgrade:"
+      info "  brew uninstall ollama           # if installed via brew formula"
+      info "  brew install --cask ollama      # install the Ollama.app cask"
+      info "  # or update Ollama.app from its menu bar"
+      die "ollama too old — no 'launch' subcommand"
+    fi
+
+    local ollama_ver
+    ollama_ver=$(printf '%s\n' "$ollama_raw" | awk '/^ollama version/ {print $NF; exit}')
+    ok "ollama ${ollama_ver:-unknown} (present, supports 'launch')"
+  else
+    info "ollama not installed — will install Ollama.app via brew cask in Phase 4"
+  fi
 }
 
 # ----------------------------------------------------------------------------
@@ -295,18 +347,16 @@ pick_model() {
 phase3_plan() {
   phase "Phase 3/5 — Plan"
 
-  # Inventory deps
+  # Inventory deps. Phase 1 already validated ollama if present (single
+  # binary, no version mismatch, supports 'launch'). Here we only detect
+  # presence/absence and extract a version string for display.
   DEPS_MISSING=()
   if command -v ollama >/dev/null 2>&1; then
-    local v; v=$(ollama --version 2>&1 | awk '{print $NF; exit}')
-    if version_ge "$v" "$OLLAMA_MIN_VERSION"; then
-      ok "ollama $v (already installed)"
-    else
-      warn "ollama $v is below minimum $OLLAMA_MIN_VERSION — will upgrade"
-      DEPS_MISSING+=("ollama")
-    fi
+    local v
+    v=$(ollama --version 2>&1 | awk '/^ollama version/ {print $NF; exit}')
+    ok "Ollama.app ${v:-present} (already installed)"
   else
-    info "ollama missing — will install via brew"
+    info "Ollama.app missing — will install via brew cask"
     DEPS_MISSING+=("ollama")
   fi
 
@@ -395,22 +445,25 @@ phase3_plan() {
 phase4_execute() {
   phase "Phase 4/5 — Execute"
 
-  # Install Ollama
+  # Install deps
   for dep in "${DEPS_MISSING[@]}"; do
     case "$dep" in
       ollama)
-        info "installing ollama via brew"
-        run brew install ollama
+        info "installing Ollama.app via brew cask"
+        run brew install --cask ollama
         ;;
       opencode)
         info "installing opencode via opencode.ai/install"
-        # NOTE(session-03): verify this curl|bash actually lands opencode on
-        # PATH. The install doc notes ~/.opencode/bin may need to be added
-        # to PATH manually. Harden this after M3 Air run.
         if [ "$DRY_RUN" = "1" ]; then
           run curl -fsSL https://opencode.ai/install '|' bash
         else
           curl -fsSL https://opencode.ai/install | bash
+          # opencode's installer drops the binary at ~/.opencode/bin and
+          # appends a PATH edit to the shell rc file. That edit doesn't
+          # apply to the current process, so Phase 5 (test.sh) and the
+          # Done message would fail to find opencode. Prepend it here.
+          export PATH="$HOME/.opencode/bin:$PATH"
+          ok "opencode on PATH for this session"
         fi
         ;;
     esac
@@ -427,10 +480,9 @@ phase4_execute() {
     daemon_ok=1
   else
     warn "daemon not reachable — attempting to start"
-    # NOTE(session-03): the exact launch command is unverified. On macOS
-    # with brew install ollama, `ollama serve` runs in the foreground.
-    # With the .app (cask), it auto-starts. We may need `open -a Ollama`
-    # instead. Figure this out on the M3 Air run.
+    # Ollama.app doesn't auto-start on install; opening it brings up the
+    # background 'ollama serve' daemon. This is the only install path we
+    # support on macOS (the brew formula is rejected in Phase 1).
     if command -v open >/dev/null 2>&1; then
       run open -a Ollama 2>/dev/null || true
     fi
