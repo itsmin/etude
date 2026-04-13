@@ -238,13 +238,64 @@ level4_inference() {
 
 level5_stack() {
   echo "Level 5 — full stack via opencode"
-  # TODO(session-03): wire this up once opencode's non-interactive CLI is
-  # confirmed on the M3 Air. Target test: send a one-shot prompt that writes
-  # a file to /tmp/etude-test-$$ and verify the file exists, then clean up.
-  # Until then, the best we can do is verify opencode loads its config.
-  skip "stubbed until session #03 real-hardware run confirms opencode one-shot syntax"
-  note "TODO: write /tmp/etude-test file via opencode one-shot and verify"
-  return 0
+
+  # Level 5 is only meaningful in configured mode. Bare mode leaves
+  # opencode unconfigured on purpose — the 'ollama launch opencode'
+  # wrapper handles provider setup at launch time, which requires an
+  # interactive TTY. `opencode run` (headless) can't reach ollama
+  # without an opencode.json declaring a provider, so bare-mode
+  # installs are unverifiable from a smoke test.
+  if ! load_sidecar; then
+    skip "no sidecar at $SIDECAR — has install.sh been run?"
+    return 0
+  fi
+
+  if [ "${ETUDE_MODE:-}" != "configured" ]; then
+    skip "mode=${ETUDE_MODE:-unknown} — bare mode can't be verified headlessly"
+    note "bare mode relies on 'ollama launch opencode' which needs a TTY"
+    note "to enable Level 5: re-run ./install.sh --mode configured"
+    return 0
+  fi
+
+  local tag
+  if ! tag=$(daily_model_tag); then
+    skip "no daily model in sidecar"
+    return 0
+  fi
+
+  if ! command -v opencode >/dev/null 2>&1; then
+    fail "opencode not on PATH (sidecar says mode=configured)"
+    note "ensure \$HOME/.opencode/bin is on PATH"
+    return 1
+  fi
+
+  local marker="ETUDE-L5-OK-$$"
+  local tmpdir
+  tmpdir=$(mktemp -d 2>/dev/null) || { fail "could not create tempdir"; return 1; }
+
+  note "running: opencode run (ollama-local/$tag) — may take 15-30s"
+  local out rc
+  out=$(cd "$tmpdir" && opencode run \
+    "reply with exactly: $marker (nothing else, no quotes, no explanation)" \
+    -m "ollama-local/$tag" \
+    --dangerously-skip-permissions 2>&1)
+  rc=$?
+  vnote "exit $rc"
+  vnote "output tail: $(printf '%s' "$out" | tail -5 | tr '\n' ' ')"
+  rm -rf "$tmpdir"
+
+  if [ "$rc" -ne 0 ]; then
+    fail "opencode run exited $rc"
+    note "tail: $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
+    return 1
+  fi
+  if printf '%s' "$out" | grep -q "$marker"; then
+    pass "opencode → ollama-local/$tag → marker matched"
+    return 0
+  fi
+  fail "opencode response didn't contain the marker '$marker'"
+  note "tail: $(printf '%s' "$out" | tail -5 | tr '\n' ' ')"
+  return 1
 }
 
 # ----------------------------------------------------------------------------
