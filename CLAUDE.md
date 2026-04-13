@@ -20,6 +20,7 @@ Project: **etude** — an install kit and docs for running a Claude Code-like co
 
 ## Critical reminders
 
+- **`tiers.tsv` is NOT trustworthy for agentic recommendations as of session #03.** All Qwen rows (which is every tier) are registered `reliability = good` but session #03 observed qwen3:8b and qwen3-coder:30b both fail to tool-call via opencode through ollama's OpenAI-compatible adapter. Text generation still works; tool calling does not. **Do not trust any registered Qwen row as agentically viable until the session-#04 reliability audit and the "find a working model" hunt land.** Install.sh will still install them; smoke test Levels 1–5 will still pass; the model just won't be able to use tools in opencode's Build agent. Until the audit lands, the honest user-facing guidance is "install works, `opencode run` text generation works, but don't expect agentic file edits."
 - **macOS install path is Ollama.app cask, not brew formula.** The brew formula (`brew install ollama`) lags the Ollama.app and may ship without the `launch` subcommand; on a machine with both installed, the formula's old client typically intercepts calls to the newer server. `install.sh` Phase 1 refuses to proceed if it detects either condition (multi-binary PATH conflict, client/server mismatch warning, or missing `launch`). The fix is always `brew uninstall ollama`; Ollama.app survives.
 - **Bare vs configured is interactive-vs-scriptable, not light-vs-full.** Bare mode relies on `ollama launch opencode` which needs a TTY. Configured mode writes `opencode.json` with an `ollama-local` provider (via `@ai-sdk/openai-compatible` → `localhost:11434/v1`) and works both in the opencode TUI and in `opencode run` headless mode. Configured is the default; bare is an opt-in for users who really don't want a config file.
 
@@ -90,39 +91,46 @@ New in-session-#03 finding that's still open:
 
 ### P1 (active)
 
-**Session #04 — M1 Air 16GB first install.** First session against a genuinely fresh machine — Ollama.app not installed, opencode not installed, brew present. Exercises the `brew install --cask ollama` branch of Phase 4 that session #03 couldn't test (M3 Air already had Ollama.app). Tests the `mac-light` tier for the first time. Validates the harness generalizes across Mac variants. Full plan below.
+**Session #04 — Registry reliability audit + working-model hunt.** Session #03 closed with a decisive finding: both Qwen models we tested (qwen3:8b, qwen3-coder:30b) fail to tool-call via opencode through ollama, in distinct-but-equivalently-broken ways (neither reads opencode's actual tool schema; both confabulate). Big Pickle cloud worked cleanly in the same install. **Every `reliability = good` Qwen row in `tiers.tsv` is now known-aspirational, not known-working**, and etude's entire "local-first agentic coding" premise needs either a working model family or a working upstream fix before the next hardware rollout is meaningful.
+
+Session #04 cannot be the M1 Air test — the M1 Air will hit the exact same bug on whatever Qwen daily pick is registered for `mac-light`, so installing it would just reproduce the known failure. Session #04 has to come first. Full plan below.
 
 ### P2 (next up)
 
-- Session #05: first real-hardware run on the RTX 5080 PC (gpu-16gb tier, Windows install path)
-- Rewrite `docs/install-macos.md` to match the harness — delete the speculative brew-formula prose, replace with "run `./install.sh`, here's what it does, here's what to watch for." Deferred from session #03. Should happen after session #04 confirms the harness across two Macs.
-- Build `scripts/status.sh` — read-only audit tool. Reads sidecar + TSV + `ollama list` + `ollama show`, reports drift between intended and actual state. Complements `test.sh` (test is functional, status is inventory). Session #03 produced the first real sidecar, so this is now buildable.
-- Build `install.sh --refresh` mode — detect existing sidecar at startup, compare to current TSV, offer to pull delta and rewrite config. Same entry point, different mode.
-- `status.sh --check-updates` — single network call to fetch origin `tiers.tsv` and diff against local. Opt-in, not in `install.sh`. Build alongside `status.sh`.
-- **Tool-calling comparison across models.** Session #03's finding: qwen3:8b can't reliably invoke tools via opencode at all. First test: called `read` with `filePath: undefined`. Retest with a file that actually existed: 4+ minutes of "Wait... let me check the tools again..." monologue, model claimed the `read` function didn't exist in its toolset (it does), never invoked any tool. qwen3-coder:30b is the natural next comparison — heavier model, coder-tuned, might parse the tool schema correctly. Queue for session #04 opening if session #03 didn't get to it.
-- Flesh out `docs/usage.md` — day-to-day patterns, mode switching, real examples
-- Capture real latency numbers for the LAN-serve flow (Air → desktop)
-- Rewrite `install-windows.md` alongside the PC session
-- Watch the Gemma 4 E4B tool-calling bug; flip its `reliability` from `watching` to `good` in `tiers.tsv` once fixed upstream
+- **Session #05 (was #04): M1 Air 16GB first install.** Only meaningful once session #04 finds a working model; otherwise we're installing a known-broken path on a second machine. Still valuable for the `brew install --cask ollama` fresh-install branch that session #03 couldn't exercise.
+- **Session #06 (was #05): RTX 5080 PC first install** (gpu-16gb tier, Windows). Same ordering constraint — need a working model first.
+- **Rewrite `docs/install-macos.md`** — deferred from session #03. The prose is 133 lines of outdated brew-formula speculation. Should happen after session #04's model pivot lands so the doc describes the actual working path.
+- **Build `scripts/status.sh`** — read-only audit tool. Reads sidecar + TSV + `ollama list` + `ollama show`, reports drift between intended and actual state. Session #03 produced the first real sidecar, so this is now buildable. A `status.sh --check-updates` variant should probably also resolve every registered tag against ollama's registry as a "does this exist" sanity check — that's the class of bug that hit us in session #03.
+- **Build `install.sh --refresh` mode** — detect existing sidecar at startup, compare to current TSV, offer to pull delta and rewrite config.
+- Flesh out `docs/usage.md` — day-to-day patterns, mode switching, real examples.
+- Capture real latency numbers for the LAN-serve flow (Air → desktop).
+- Rewrite `install-windows.md` alongside the PC session.
+- Watch the Gemma 4 E4B tool-calling bug; flip its `reliability` from `watching` to `good` in `tiers.tsv` once fixed upstream.
+- File upstream bug(s) for the qwen + ollama OpenAI-compat + opencode tool-schema issue once we have a minimal repro.
 
 ### Upcoming sessions
 
-**Session #04 — M1 Air 16GB first install**
+**Session #04 — Registry reliability audit + working-model hunt**
 
-1. **Verify starting state.** Confirm M1 Air has: no Ollama.app, no opencode, brew present, disk has ≥10GB free. Run the project-specific health check (Project health checks subsection above). Document baseline.
-2. **Run `./install.sh --plan`** interactively. Walk every prompt. Tier should auto-detect as `mac-light`. Mode default should be `configured`. Note anything confusing — the M1 Air user is a fresh reader of the new harness, not someone who's been hacking on it for a session.
-3. **Run `./install.sh`** for real. This is the first session that exercises the full "install Ollama.app from nothing" branch — `brew install --cask ollama` will actually run. Watch for: whether brew prompts for sudo on /Applications writes, how Phase 4's `open -a Ollama` behaves on a cold install (macOS may show the "are you sure you want to open this app from the internet" dialog on first launch), and whether daemon auto-start works or needs human intervention.
-4. **Run `./scripts/test.sh`** — Levels 1–5 should pass. If any fail, fix before moving on.
-5. **Tool-calling spot-check.** Repeat the session #03 "write a file" test with `mac-light`'s daily model (first check `scripts/lib/tiers.tsv` for what that is — may be `qwen3:4b`). Compare to the session #03 qwen3:8b observation. A smaller model failing is expected and informative; a smaller model succeeding is surprising and informative.
-6. **Commit in logical chunks** as you go.
+The goal is to restore `tiers.tsv` to a state where every `reliability = good` row is actually verified, and to find at least one working path for agentic coding via opencode on the M3 Air. M1 Air / PC rollouts come after.
 
-Out of scope for #04: PC/Windows, install-macos.md rewrite, status.sh, Ollama Cloud, LAN flow.
+1. **Audit pass: demote known-bad rows.** In `tiers.tsv`, change all Qwen rows that were not personally verified in session #03 from `reliability = good` to `reliability = watching` with a note like "qwen family tool-schema issue with opencode as of 2026-04-13, see session #03". Also demote the two rows session #03 did verify (qwen3:8b for mac-air-24gb, qwen3-coder:30b for mac-air-24gb heavy) with evidence notes. Run `./install.sh --plan --non-interactive` and confirm the installer now refuses mac-air-24gb (no good daily pick) — the honest state.
+2. **Decide the hunt strategy.** Two branches, not mutually exclusive:
+   - **Try a non-Qwen local model.** Candidates from session #03 research + tonight's follow-up web search: likely `llama3.3` family, `mistral`/`devstral`, `gemma3` (if tool-calling is unbroken in current Ollama), or `deepseek-coder-v2`. Pick one, pull, test with the same README prompt in opencode. If it calls `Read` with a valid filePath, you've found a working path.
+   - **Try Ollama Cloud (`:cloud` models).** Big Pickle via OpenCode Zen worked in session #03, which means the opencode/Build-agent side is fine and the bug is specifically in local-qwen-via-ollama. A `:cloud` model routes through your local ollama client but is served by ollama.com — different code path, possibly different tool-schema translation. Requires signing up for Ollama Cloud first (open thread). GLM-5 or Kimi K2.5 would be good candidates if they're in the cloud catalog.
+3. **Update `tiers.tsv`** with whatever works. Add the new model(s) as `reliability = good`. If nothing works, that's also a finding — etude's premise gets honest about "local-first" being aspirational and the registry honestly reflects "no fully-local agentic option today."
+4. **Update `docs/models.md`** with the decision narrative. Future readers need to know what was tried and why.
+5. **Test `opencode run`** (headless) + interactive TUI + the session #03 README prompt against the winning model. All three should produce SUMMARY.md. Time each one.
+6. **File upstream minimal repro** (if time): a small test case showing "ollama X + qwen Y + OpenAI-compat tool schema Z → wrong tool call." Belongs on the ollama repo probably; cross-post to opencode if relevant. This isn't fixing upstream, just making sure the bug is findable by whoever does.
+7. **Commit in logical chunks.**
+
+Out of scope for #04: M1 Air test, PC/Windows, install-macos.md rewrite, status.sh, LAN flow.
 
 **Conditional branches**:
-- If `brew install --cask ollama` requires sudo interactively → document, consider whether `install.sh` can detect and warn upfront.
-- If the M1 Air thrashes during qwen3:4b inference → mac-light's daily pick may be wrong; adjust `tiers.tsv`.
-- If Level 5 fails against mac-light's daily → that tier may be unviable for headless use; note in registry and adjust expectations, don't chase the model.
-- If everything works cleanly on the first run → great signal that the session #03 architectural changes generalize; accelerate session #05 planning.
+- If a non-Qwen local model works → that becomes the recommended daily driver, push M1 Air to session #05 with the new pick.
+- If only `:cloud` models work → etude's positioning shifts. "Local-first, cloud-fallback" becomes "cloud-first where local is broken, local where it works." The docs and tier table need that reframing.
+- If *nothing* works → pause the hardware rollouts entirely. Investigate the upstream bug as the critical path. Session #05 becomes "fix or wait for upstream."
+- If the Qwen bug turns out to be configurable-away (e.g., a different model template, a specific ollama flag, an opencode provider tweak) → undo the P1 demotions and the panic, but keep the audit as a discipline.
 
 ### Parking lot (out of scope for now)
 
@@ -157,7 +165,8 @@ Out of scope for #04: PC/Windows, install-macos.md rewrite, status.sh, Ollama Cl
 - **Disk cleanup:** removed `gpt-oss:20b` (13GB, unused for 7 months) to make room for the heavy-model pull. Resolved the "stale model" open thread.
 - **Deferred from #03:** `docs/install-macos.md` rewrite. The prose is 133 lines of outdated brew-formula speculation and needs a careful rework, not rushed. Only the tag references were patched this session; structural rewrite is P2.
 - **Not tested:** the fresh `brew install --cask ollama` branch of Phase 4 — M3 Air already had Ollama.app from a direct download. First genuinely-fresh-machine session is the target for that.
-- **Heavy model (qwen3-coder:30b) comparison:** pull was running against the fixed tag as session #03 wound down. Whether it closed the tool-calling gap or reproduced the same failure is the decisive question for the mac-air-24gb tier's viability; resolved in session #04 opener.
+- **Heavy model (qwen3-coder:30b) comparison — resolved, negative result.** Same prompt, 55 seconds, 4.2K tokens, one tool call attempted then abandoned. The model called a non-existent `Skill "read_file"` (opencode has no `Skill` family; the actual tool is `Read` with a `filePath` param), got `Skill 'read_file' not found`, apologized, and asked the user to clarify the task. **Different hallucination, same underlying failure as qwen3:8b**: neither Qwen model is reading opencode's actual tool schema. Big Pickle (cloud control) worked correctly in the same install in 8 seconds. The bug is in the ollama → opencode → Qwen tool-schema translation layer, not the model size.
+- **Implication: most of `tiers.tsv`'s agentic recommendations are factually wrong.** Every Qwen row registered as `reliability = good` is now known-broken for tool calling, which is every Mac tier and every GPU tier. Text generation still works — Level 5 smoke test still passes, `opencode run "reply with X"` still works — but agentic use (tool calling) does not. The registry audit is session #04's P1.
 
 ### Session #02 — Install harness (2026-04-12)
 - Architectural pivot: etude was "recipe book + detection script," now it's "guided installer with a single source of truth." Driven by end-user walkthrough — there was no install mechanism, just prose.
