@@ -36,7 +36,7 @@ Project: **etude** — an install kit and docs for running a Claude Code-like co
 Run these and report — don't auto-fix. Present as "found these, here's what it means."
 
 - `ollama --version` — is it 0.20.2+?
-- `ollama list` — are the expected models pulled (qwen3:8b, qwen3-coder:30b-a3b)?
+- `ollama list` — are the expected models pulled (qwen3:8b, qwen3-coder:30b)?
 - `opencode --version` — is the harness available?
 
 ### Documentation sync checklist (session-end, Step 5)
@@ -77,7 +77,12 @@ Still unverified:
 - **`install-macos.md` prose** — deferred from session #03, needs a full rewrite to match the harness (currently documents the old brew-formula path).
 
 New in-session-#03 finding that's still open:
-- **qwen3:8b tool-calling reliability via opencode.** Level 5 smoke test (text generation) passes reliably. Two real-task tests ("write a debounce hook with tests", "use the write tool to create ./hello.txt with contents: hello from etude") both failed to invoke the write tool — the model either returned nothing visible or asked for parameters the prompt already provided. Plumbing works; agentic tool-calling is unreliable on qwen3:8b. Needs comparison against qwen3-coder:30b-a3b before we can tell if it's a model-size issue or a prompt/agent-config issue. Not a harness bug.
+- **qwen3:8b tool-calling is not usable via opencode.** Level 5 smoke test (text generation) passes cleanly. Everything else fails. Evidence from three tests:
+  - Headless `opencode run` with "write a debounce.ts file" — 1m45s wall, no file written, no visible response.
+  - Interactive TUI with "use the write tool to create ./hello.txt" (README didn't exist at this point) — called `read` with `filePath: undefined`, got the schema error back, then produced a long "Thinking:" monologue telling *the user* how to format a tool call in JSON. Role-confused, never retried.
+  - Interactive TUI with a real README in place — 4m41s of circular "Wait, let me check the tools again... the functions available are Edit, Write, Search, Todo, Skill... there's no Read function..." monologue. Enumerated the tool list from confabulation, missed the actual `Read` tool opencode provided (Big Pickle called it correctly in 8 seconds in the same opencode, same agent). Never invoked any tool. 6,100+ tokens of internal debate, no progress.
+- Big Pickle (OpenCode Zen cloud) was the control: correct tool invocation, multi-step recovery, 8 seconds. The bug is the model, not opencode's Build agent or the tool schema.
+- qwen3-coder:30b is the natural next comparison. If it works, the mac-air-24gb tier's *daily* pick is wrong (should be heavy-as-daily) and the *heavy* pick is fine. If it also fails, the entire mac-air-24gb tier needs a model pivot or etude pivots toward a configured-mode cloud-first story for that tier.
 
 ---
 
@@ -94,7 +99,7 @@ New in-session-#03 finding that's still open:
 - Build `scripts/status.sh` — read-only audit tool. Reads sidecar + TSV + `ollama list` + `ollama show`, reports drift between intended and actual state. Complements `test.sh` (test is functional, status is inventory). Session #03 produced the first real sidecar, so this is now buildable.
 - Build `install.sh --refresh` mode — detect existing sidecar at startup, compare to current TSV, offer to pull delta and rewrite config. Same entry point, different mode.
 - `status.sh --check-updates` — single network call to fetch origin `tiers.tsv` and diff against local. Opt-in, not in `install.sh`. Build alongside `status.sh`.
-- **Tool-calling comparison across models.** Session #03's finding was qwen3:8b didn't reliably invoke write tools via opencode. Worth a focused session to test qwen3-coder:30b-a3b (heavy mode) and compare, plus check opencode's default agent config for whether it's tool-ready by default.
+- **Tool-calling comparison across models.** Session #03's finding: qwen3:8b can't reliably invoke tools via opencode at all. First test: called `read` with `filePath: undefined`. Retest with a file that actually existed: 4+ minutes of "Wait... let me check the tools again..." monologue, model claimed the `read` function didn't exist in its toolset (it does), never invoked any tool. qwen3-coder:30b is the natural next comparison — heavier model, coder-tuned, might parse the tool schema correctly. Queue for session #04 opening if session #03 didn't get to it.
 - Flesh out `docs/usage.md` — day-to-day patterns, mode switching, real examples
 - Capture real latency numbers for the LAN-serve flow (Air → desktop)
 - Rewrite `install-windows.md` alongside the PC session
@@ -130,10 +135,10 @@ Out of scope for #04: PC/Windows, install-macos.md rewrite, status.sh, Ollama Cl
 
 ### Open threads (carry forward)
 
-- **qwen3:8b tool-calling reliability via opencode.** Session #03 observation on M3 Air: two "write a file" prompts failed to invoke the write tool (first attempt produced no visible response; second attempt asked for parameters the prompt already specified). Text generation via `opencode run` works reliably — Level 5 smoke passes. Plumbing is not the problem. Worth comparing against qwen3-coder:30b-a3b and inspecting opencode's default agent / system prompt. Might just be that smaller open-weight models need more hand-holding, or opencode's default agent isn't configured for local-model tool use.
-- **Ollama Cloud auth / pricing mechanics.** Still not explored. Interesting note: the M3 Air `ollama list` shows `gpt-oss:20b-cloud` from "2 weeks ago" — the author has touched Ollama Cloud at some point but the context is lost. Sign-up flow, key storage, current `:cloud` model catalogue all still unknown. Parked until a session needs it.
+- **qwen3:8b + opencode: not viable for agentic use, confirmed.** Session #03 observation (see Pending verifications above for the full three-test trace). Plumbing works; the model either can't parse opencode's tool schema, confabulates a different schema from memory, or gets stuck in circular "Wait..." loops trying to figure out whether a tool exists. Big Pickle control test in the same opencode install worked in 8 seconds. The bug is the model. Implication for `tiers.tsv`: if qwen3-coder:30b also fails when session #04 tests it, the `mac-air-24gb` daily pick is fundamentally wrong and needs to change — potentially no local-only option exists for the tier. Worth inspecting whether ollama's OpenAI-compatible tool-call translation might be the real culprit (vs. the model itself) as part of the investigation.
+- **Ollama Cloud auth / pricing mechanics.** Still not explored. Sign-up flow, key storage, current `:cloud` model catalogue all still unknown. Parked until a session needs it.
 - **Windows install doc ordering.** The doc currently defaults to fully-native Windows with WSL2 as the advanced path. Since the PC doubles as a LAN inference server, WSL2-for-opencode + native-Ollama may be the better anchor. Revisit when verifying `install-windows.md`.
-- **`gpt-oss:20b` stale model on M3 Air.** 13GB, pulled 7 months ago, no clear reason to keep around. Could be cleared to reclaim disk, but not blocking anything. `status.sh` (once built) should probably surface "models on disk that aren't in your sidecar" as a tidy-up signal.
+- **Registry tag validation.** Session #03 caught `qwen3-coder:30b-a3b` in `tiers.tsv` as a tag that doesn't exist on ollama.com — the real tag is `qwen3-coder:30b`. Only caught because we did a real pull. `status.sh --check-updates` (P2) should probably also do a "does every registered tag still resolve?" sanity check; `install.sh` Phase 1 could do the same on the tags it's about to pull, before committing to a plan.
 
 ### Deferred (in scope, bumped)
 
@@ -147,10 +152,12 @@ Out of scope for #04: PC/Windows, install-macos.md rewrite, status.sh, Ollama Cl
 - **Wired test.sh Level 5.** `opencode run` against `ollama-local/<daily-tag>` with a unique marker prompt; passes if the response contains the marker. Skips with explanation in bare mode. Verified passing on M3 Air with qwen3:8b.
 - **Smaller fixes:** picker default for optional roles is now "skip" not "pick first" (makes `--non-interactive` usable for minimal installs); sidecar build no longer leaves a blank line inside `ETUDE_MODELS`; Phase 4 propagates `~/.opencode/bin` into the current process PATH so Phase 5's test.sh sees opencode.
 - **Verified end-to-end** on M3 Air: install.sh full path, all 5 smoke test levels pass, `opencode run → ollama-local/qwen3:8b → text response` confirmed.
-- **Finding (open thread):** qwen3:8b's tool-calling via opencode is unreliable on the first turn — two "write a file" tests failed to invoke the write tool. Text generation works; agentic tool use needs investigation against qwen3-coder:30b-a3b and opencode's default agent config.
-- **Deferred from #03:** `docs/install-macos.md` rewrite. The prose is extensive (133 lines of brew-formula speculation) and needs a careful rework, not rushed. Requeued to P2 for after session #04 confirms the harness across two Macs.
+- **Finding (confirmed, not just "unreliable"):** qwen3:8b via opencode is **not usable for agentic work.** Three tests, each worse than the last: (1) headless `opencode run "write a debounce file"` — 1m45s wall, no file written, no visible response. (2) Interactive TUI with "use the write tool to create ./hello.txt" — model called `read` with `filePath: undefined`, got the schema error, then wrote a long monologue telling *the user* how to format tool calls in JSON (role flip, no retry). (3) Interactive TUI with a real README in place — 4m41s of circular "Wait, let me check the tools again..." monologue. The model enumerated the tool list from confabulation ("Edit, Write, Search, Todo, Skill") and concluded `Read` didn't exist, while Big Pickle in the same opencode install called `Read` correctly in 8 seconds as a control. The bug is the model, not opencode or the tool schema.
+- **Registry bug caught by dogfooding.** `tiers.tsv` registered `qwen3-coder:30b-a3b` as the heavy tag for 5 tiers, but ollama's library only publishes `qwen3-coder:30b`. Session #01's naming-convention guess was wrong; nobody noticed until the first real pull. Fixed across `tiers.tsv`, 6 `config/opencode/*.json` templates, `docs/models.md`, `docs/install-macos.md`, `docs/install-windows.md`, and this doc. Also corrected the size: it's ~19GB, not ~17GB. Caught explicit "verify claims before recommending" collab rule doing its job. Added as an open thread — registry tag validation belongs in `status.sh --check-updates` and possibly `install.sh` Phase 1.
+- **Disk cleanup:** removed `gpt-oss:20b` (13GB, unused for 7 months) to make room for the heavy-model pull. Resolved the "stale model" open thread.
+- **Deferred from #03:** `docs/install-macos.md` rewrite. The prose is 133 lines of outdated brew-formula speculation and needs a careful rework, not rushed. Only the tag references were patched this session; structural rewrite is P2.
 - **Not tested:** the fresh `brew install --cask ollama` branch of Phase 4 — M3 Air already had Ollama.app from a direct download. First genuinely-fresh-machine session is the target for that.
-- 6 commits: install.sh cask pivot, test.sh mirror detection, picker default fix, install.sh mode default + sidecar fix, test.sh Level 5 wiring, plus the earlier session-command housekeeping commit.
+- **Heavy model (qwen3-coder:30b) comparison:** pull was running against the fixed tag as session #03 wound down. Whether it closed the tool-calling gap or reproduced the same failure is the decisive question for the mac-air-24gb tier's viability; resolved in session #04 opener.
 
 ### Session #02 — Install harness (2026-04-12)
 - Architectural pivot: etude was "recipe book + detection script," now it's "guided installer with a single source of truth." Driven by end-user walkthrough — there was no install mechanism, just prose.
