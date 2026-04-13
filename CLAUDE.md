@@ -2,7 +2,7 @@
 
 Project: **etude** — an install kit and docs for running a Claude Code-like coding agent on open-weight models. Three tiers: local, LAN peer, Ollama Cloud.
 
-**Status**: Early scaffold. Two machine profiles are verified by the author — MacBook Air M3 (24GB) and a desktop with Ryzen 7 5800X + RTX 5080 16GB. Other tiers are documented but unverified.
+**Status**: Scaffold + install harness. `install.sh` runs end-to-end in dry mode on the author's M3 Air. Nothing has been installed against real hardware yet — session #03 is the first real run. Two machine profiles are the author's primary targets — MacBook Air M3 (24GB) and a desktop with Ryzen 7 5800X + RTX 5080 16GB. Other tiers have registry entries and config templates but are all unverified.
 
 ---
 
@@ -34,17 +34,28 @@ Project: **etude** — an install kit and docs for running a Claude Code-like co
 
 ## Pending verifications
 
-Nothing in the session #01 scaffold has been tested on real hardware. The following all need end-to-end verification before they can be treated as known-working:
+Session #02 shifted from "verify prose" to "build harness." The harness (`install.sh`, `scripts/lib/tiers.*`, `scripts/test.sh`) replaces the prose as the thing to verify, and it's been exercised in dry mode on the M3 Air but has not yet installed anything.
 
-- `install-macos.md` — full install path on the M3 Air
-- `install-windows.md` — full install path on the RTX 5080 PC
-- `scripts/detect-tier.sh` — actually runs and returns sane output on Mac and Linux/WSL
-- `config/opencode/mac-air-24gb.json` — loads without errors, `/models` shows all entries
-- `config/opencode/gpu-rtx5080-16gb.json` — same
-- **LAN-serve flow** (Air → desktop Ollama) — most speculative piece of the architecture
-- `ollama launch opencode --model X` — verified in research, not on real hardware
+Partial (verified in-session on the M3 Air in dry mode):
+- `scripts/detect-tier.sh` — all three modes (`--tier-only`, `--json`, human) return correct output for this machine
+- `scripts/lib/tiers.sh` — registry parsing, consistency check, installable check all work
+- `install.sh` Phase 1 preflight — correctly validates registry, deps, homebrew, write perms, network
+- `install.sh` Phase 2 detection + Phase 3 picker + plan + disk check — full path works, non-interactive mode clean
+- `install.sh` Phase 4 execute + Phase 5 smoke test — dry-run path works, side-effecting commands NOT executed
+- `scripts/test.sh` Levels 1–2 — partial real verification: ollama 0.20.5 detected, version check passes, daemon check ready
 
-Session #02 attacks items 1, 3, 4 first (see Upcoming sessions).
+Still fully unverified (needs real-hardware session #03):
+- Actual `brew install ollama` + daemon start on a machine that doesn't already have it
+- Actual `curl -fsSL https://opencode.ai/install | bash` — does opencode land on PATH?
+- Actual `ollama pull` against the picked models
+- Actual opencode startup with a written config
+- `ollama launch opencode --model X` — the "bare mode" happy path
+- `test.sh` Levels 3–5 (sidecar read, inference check, opencode one-shot stub)
+- All tiers other than `mac-air-24gb` — everything else is registry entry + config template without a real run
+- `install-windows.md` — entire Windows path
+- LAN-serve flow (Air → desktop Ollama)
+
+The install-doc prose (`install-macos.md`, `install-windows.md`) is now **behind** the install script. Session #03 will rewrite the prose to match what actually happens during the real run, not what session #01 speculated.
 
 ---
 
@@ -52,27 +63,38 @@ Session #02 attacks items 1, 3, 4 first (see Upcoming sessions).
 
 ### P1 (active)
 
-**Session #02 — first verification pass.** The scaffold is entirely unverified. Next session runs it end-to-end on real hardware, starting with shell hygiene and ending with a real task through opencode on the Air. Full plan in Upcoming sessions.
+**Session #03 — first real-hardware run (M3 Air).** The harness exists and passes dry-mode checks. Now actually run it against this M3 Air with nothing pre-installed — or with opencode pre-installed to test that path. Walk through the flow, note every moment the script got something wrong, fix the script. End with opencode running a real task against a locally-pulled qwen3:8b. Full plan below.
 
 ### P2 (next up)
 
-- Verify `install-windows.md` end-to-end on the 5800X / RTX 5080 box: native Ollama first, then LAN-serve mode to the Air
-- Flesh out `docs/usage.md` — day-to-day patterns, mode switching, real examples (replaces the stub)
+- Session #04: first real-hardware run on the M1 Air 16GB (second machine, mac-light tier, validates that the architecture generalizes)
+- Session #05: first real-hardware run on the RTX 5080 PC (gpu-16gb tier, Windows install path)
+- Wire up `test.sh` Level 5 (opencode one-shot) after the M3 run confirms opencode's non-interactive CLI
+- Build `scripts/status.sh` — read-only audit tool, complements `test.sh`
+- Flesh out `docs/usage.md` — day-to-day patterns, mode switching, real examples
 - Capture real latency numbers for the LAN-serve flow (Air → desktop)
-- Write a Windows-native detection script (PowerShell) or document running the bash version under WSL
-- Watch the Gemma 4 E4B tool-calling bug (Ollama 0.20.x); swap it into the chat-mode slot once fixed
+- Rewrite `install-macos.md` and `install-windows.md` to match what the harness actually does
+- Watch the Gemma 4 E4B tool-calling bug; flip its `reliability` from `watching` to `good` in `tiers.tsv` once fixed
 
 ### Upcoming sessions
 
-**Session #02 — first verification pass** (confirmed at session #01 end):
+**Session #03 — first real-hardware run on the M3 Air**:
 
-1. **Shell hygiene + git init.** `chmod +x scripts/detect-tier.sh`, `git init`, first commit of the scaffold. Unblocks everything — confirms Bash tools work again after the session #01 harness CWD break.
-2. **Run `detect-tier.sh` on both machines.** Mac Air should report `mac-air-24gb` with Qwen3 recommendations. PC should report `gpu-16gb` with Qwen3-Coder 30B-A3B. Fix the script if either output is wrong before moving on.
-3. **Verify `install-macos.md` end-to-end on the Air.** Fresh path: confirm Ollama ≥0.20.2, `ollama pull qwen3:8b`, `ollama launch opencode --model qwen3:8b` in a real project dir, run one actual task (e.g., "write a debounce hook"). Note what breaks, note what the doc got wrong, fix the doc before ending the session.
-4. **Fix the `docs/usage.md` path reference.** Remove or genericize the `~/Desktop/gemma4-setup.md` mention before any public push. Small hygiene item, easy to forget.
-5. **Conditional**: if Air verification surfaces architectural issues (e.g., `ollama launch` doesn't work the way research suggested), that jumps to P1 and items #4 + Windows pass slide.
+1. **Decide starting state.** Either uninstall opencode first for a "truly fresh" test, or run `./install.sh` against the current state (ollama 0.20.5 present, opencode missing) and accept that the "fresh ollama install" branch stays unverified for now. Lean toward the second — faster, still exercises the interesting parts.
+2. **Run `./install.sh --plan`** and walk through it interactively. Every prompt, every default. Note anything confusing.
+3. **Run `./install.sh` for real** in bare mode, picking qwen3:8b only (skip heavy to keep it fast). Watch every step. First real test of: `brew install ollama` (already installed, so skip check), `curl | bash` for opencode + PATH handling, `ollama pull qwen3:8b`, sidecar write.
+4. **Run `./scripts/test.sh`** against the fresh install. Levels 1–4 should all pass. Note anything that surprises you.
+5. **Run the actual happy path.** `cd` into some real project, `ollama launch opencode --model qwen3:8b`, give it a real task (e.g. "write a debounce hook with tests"). Observe: does it work? Does tool calling reliably land? What's the latency? Capture anything worth noting.
+6. **Wire up `test.sh` Level 5.** Based on what you learned about opencode's CLI, implement the one-shot file-write test. Run the full test suite end-to-end.
+7. **Rewrite `install-macos.md`** to match what actually happened. The old prose is now stale — replace with "run `./install.sh`, here's what to expect, here are the moments to watch for."
+8. **Commit in logical chunks** as you go. Don't batch everything into one commit.
 
-Out of scope for #02: Windows verification, writing `docs/usage.md` properly, LAN flow, Gemma 4 watch. Windows is its own session.
+Out of scope for #03: M1 Air run, Windows, LAN flow, `status.sh`, Ollama Cloud auth. Keep session scoped to "one machine, one run, fix what's wrong."
+
+**Conditional branches**:
+- If `ollama launch opencode` doesn't work as researched, `bare` mode is broken and we fall back to `configured` mode as the sole happy path. That's a real architectural change — update the installer.
+- If opencode's curl-bash doesn't land it on PATH cleanly, Phase 4 needs a post-install PATH check and a shell-rc edit (or instruction).
+- If `test.sh` Level 4 inference is slower than ~15s, bump the timeout expectation or use a smaller test prompt.
 
 ### Parking lot (out of scope for now)
 
@@ -92,6 +114,17 @@ Out of scope for #02: Windows verification, writing `docs/usage.md` properly, LA
 *(none yet)*
 
 ### Complete (recent)
+
+### Session #02 — Install harness (2026-04-12)
+- Architectural pivot: etude was "recipe book + detection script," now it's "guided installer with a single source of truth." Driven by end-user walkthrough — there was no install mechanism, just prose.
+- Built `scripts/lib/tiers.tsv` (pipe-delimited registry, one row per tier/model) + `scripts/lib/tiers.sh` (parse, filter, consistency check, installable check). Tier facts now live in exactly one place.
+- Refactored `detect-tier.sh` to read from the registry; added `--tier-only` and `--json` output modes for scripting.
+- Wrote `install.sh` — five-phase guided installer (preflight → detect → plan → execute → smoke test). Phases 1–3 are side-effect-free; Phase 3 ends with a plan-confirm gate before any writes. Flags: `--dry-run`, `--plan`, `--tier`, `--mode`, `--non-interactive`.
+- Wrote `scripts/test.sh` — layered smoke test, five levels, exit code = failing level. Levels 1–4 real, Level 5 stubbed pending real-hardware opencode CLI verification.
+- Added config templates for all registered tiers (mac-light, mac-pro-32gb, mac-heavy-64gb, mac-max, gpu-light, gpu-24gb, gpu-heavy); renamed `gpu-rtx5080-16gb.json → gpu-16gb.json` to match tier naming.
+- git init + commits; fixed the `~/Desktop/gemma4-setup.md` path leak in `usage.md`; updated README to make `./install.sh` the entry point.
+- **Partial verification on the M3 Air in-session**: detect-tier (all 3 modes), registry consistency, install.sh dry-run end-to-end for mac-air-24gb and mac-light, test.sh Levels 1–2 against real ollama 0.20.5. **No actual brew install / pull / opencode invocation** — that's session #03.
+- **Caught live**: disk-tight case on the 24GB Air — 25GB free vs 22.2GB pull = correct warning + abort. The preflight architecture does its job.
 
 ### Session #01 — Scaffold (2026-04-12)
 - Designed etude: portable setup kit for open-weight coding agents, offline-first with LAN + Ollama Cloud escape hatches. Anchored on opencode + Ollama after research.

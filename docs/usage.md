@@ -16,4 +16,4 @@ This file is where the day-to-day patterns live: when to use Build vs Plan mode,
 
 ## Until this is written
 
-Read the existing notes at `~/Desktop/gemma4-setup.md` (Step 6 and the practical tips section) for the author's current day-to-day flow. This doc will replace and supersede those notes once verified.
+Follow the happy path in `docs/install-macos.md` through Step 5 (`ollama launch opencode --model qwen3:8b`) and use the agent the same way you would use any other coding agent. The patterns that hold up will land here.

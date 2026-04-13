@@ -8,19 +8,32 @@ Not a replacement for Claude Code or frontier-grade coding assistants. An étude
 
 - **opencode** as the agent shell — MIT-licensed, TUI, tool-using
 - **Ollama** as the model runtime — local, LAN-served from a beefier machine, or proxying to Ollama Cloud via the `:cloud` suffix
-- Hardware-tiered install guides with model picks that make sense for the machine in front of you
-- Config templates to drop into `~/.config/opencode/opencode.json`
-- A detection script that picks sensible defaults
+- A guided, five-phase install script that detects your hardware, picks sensible defaults, and shows you everything before touching anything
+- A tier registry (`scripts/lib/tiers.tsv`) that's the single source of truth for model recommendations per hardware profile
+- Config templates for each supported tier
+- A layered smoke test you can rerun any time
 
 ## Quick start
 
 ```bash
-./scripts/detect-tier.sh
+./install.sh
 ```
 
-Reads your RAM (or VRAM, on a PC) and points you at the right install guide.
+Five phases: preflight → detect → plan → execute → smoke test. Phases 1–3 have zero side effects, so you can bail anytime up to "proceed with plan? [Y/n]". Worth a dry run first if you're curious:
 
-Or jump in:
+```bash
+./install.sh --dry-run
+```
+
+Useful flags: `--plan` (stop after Phase 3), `--tier NAME` (override detection), `--non-interactive` (accept all defaults), `--mode bare|configured` (skip the mode prompt).
+
+Just poking at the detection logic? `./scripts/detect-tier.sh` runs it standalone.
+
+**Prerequisites** (`install.sh` checks these in Phase 1):
+- Homebrew — [brew.sh](https://brew.sh)
+- `git` and Xcode Command Line Tools — `xcode-select --install` on a fresh Mac
+
+Hardware-specific notes:
 - macOS → [docs/install-macos.md](docs/install-macos.md)
 - Windows → [docs/install-windows.md](docs/install-windows.md)
 
@@ -50,7 +63,7 @@ See [docs/models.md](docs/models.md). The file is timestamped. When it's more th
 
 ## Status
 
-Early. The author uses this on a MacBook Air M3 (24GB) and a desktop with an RTX 5080. Other machine profiles are documented but not personally verified.
+Early. Scaffold + harness exist. The install script, registry, and smoke test all run end-to-end in dry mode on the author's M3 Air. First real-hardware pass (actual install, actual model pull, actual opencode invocation) is the next session's job. Other machine profiles have configs and registry entries but none are yet verified.
 
 ## License
 
