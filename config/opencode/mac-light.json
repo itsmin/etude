@@ -8,12 +8,12 @@
         "baseURL": "http://localhost:11434/v1"
       },
       "models": {
-        "qwen3:4b": {
+        "qwen3:4b-16k": {
           "name": "Qwen3 4B (daily — snappy)",
           "tools": true,
           "limit": { "context": 16384, "output": 4096 }
         },
-        "qwen3:8b": {
+        "qwen3:8b-16k": {
           "name": "Qwen3 8B (heavy — close the browser)",
           "tools": true,
           "limit": { "context": 16384, "output": 4096 }
@@ -37,7 +37,7 @@
         "baseURL": "http://desktop.local:11434/v1"
       },
       "models": {
-        "qwen3-coder:30b": {
+        "qwen3-coder:30b-32k": {
           "name": "Qwen3-Coder 30B (LAN peer)",
           "tools": true,
           "limit": { "context": 32768, "output": 8192 }

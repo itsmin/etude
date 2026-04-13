@@ -8,12 +8,12 @@
         "baseURL": "http://localhost:11434/v1"
       },
       "models": {
-        "qwen3:8b": {
+        "qwen3:8b-32k": {
           "name": "Qwen3 8B (daily)",
           "tools": true,
           "limit": { "context": 32768, "output": 8192 }
         },
-        "qwen3-coder:30b": {
+        "qwen3-coder:30b-32k": {
           "name": "Qwen3-Coder 30B-A3B (heavy — close the browser)",
           "tools": true,
           "limit": { "context": 32768, "output": 8192 }
@@ -37,7 +37,7 @@
         "baseURL": "http://desktop.local:11434/v1"
       },
       "models": {
-        "qwen3-coder:30b": {
+        "qwen3-coder:30b-32k": {
           "name": "Qwen3-Coder 30B (desktop)",
           "tools": true,
           "limit": { "context": 32768, "output": 8192 }

@@ -92,6 +92,30 @@ tiers_last_reviewed() {
   awk '/^# Last reviewed:/ { print $4; exit }' "$ETUDE_TIERS_TSV" 2>/dev/null || echo "unknown"
 }
 
+# Look up the context-window column for a (tier, base_tag) pair.
+# Empty string if the row isn't found.
+tiers_context_for() {
+  local tier="$1" model="$2"
+  tiers_rows_for "$tier" | awk -F'|' -v m="$model" '$2 == m {print $4; exit}'
+}
+
+# Derive the local variant tag for a base tag at a given context window.
+# Convention: "<base>-<ctx/1024>k". This is the tag we create locally via
+# `ollama create` with a PARAMETER num_ctx <ctx>, and the tag templates and
+# sidecar reference — not the upstream base tag.
+#
+# The reason the variant exists: ollama's `num_ctx` defaults to 4096
+# regardless of what the model supports, and opencode's `limit.context`
+# config is send-side only — it doesn't override ollama's receive-side
+# window. At 4K, opencode's tool-definition prompts get truncated before
+# the model ever sees the tool schema, and the model confabulates tool
+# names from training memory. Baking num_ctx into a named variant is the
+# fix: the variant loads at the intended context on every call.
+variant_tag_for() {
+  local base="$1" ctx="$2"
+  printf '%s-%dk\n' "$base" "$((ctx / 1024))"
+}
+
 # ----------------------------------------------------------------------------
 # Consistency checks
 # ----------------------------------------------------------------------------

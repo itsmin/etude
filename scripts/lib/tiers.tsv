@@ -22,7 +22,7 @@
 #                    alt    : alternative at the same role, shown in picker
 #   note         — one line, decision-aiding (tells the user when to pick this)
 #
-# Last reviewed: 2026-04-12
+# Last reviewed: 2026-04-13
 #
 # tier          | model                | size_gb | context | reliability | role  | note
 mac-light       | qwen3:4b             | 2.4     | 16384   | good        | daily | Snappy. Tool calling works on simple sequences. Pick this if your Mac is always doing other things.

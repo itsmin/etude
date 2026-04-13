@@ -37,9 +37,11 @@ MODE_OVERRIDE=""
 DETECTED_TIER=""
 DETECTED_DESCRIBE=""
 CHOSEN_TIER=""
-CHOSEN_DAILY=""    # "tag"
-CHOSEN_HEAVY=""    # "tag" or empty
-CHOSEN_MODE=""     # "bare" or "configured"
+CHOSEN_DAILY=""            # base tag (what `ollama pull` accepts), e.g. "qwen3:8b"
+CHOSEN_HEAVY=""            # base tag or empty
+CHOSEN_DAILY_VARIANT=""    # local variant with baked num_ctx, e.g. "qwen3:8b-32k"
+CHOSEN_HEAVY_VARIANT=""    # local variant or empty
+CHOSEN_MODE=""             # "bare" or "configured"
 
 # Things Phase 3 writes, Phase 4 reads
 DEPS_MISSING=()    # e.g. ("ollama" "opencode")
@@ -382,6 +384,24 @@ phase3_plan() {
   [ -n "$CHOSEN_DAILY" ] && MODELS_TO_PULL+=("$CHOSEN_DAILY")
   [ -n "$CHOSEN_HEAVY" ] && MODELS_TO_PULL+=("$CHOSEN_HEAVY")
 
+  # Derive the local variant tag for each chosen pick. The variant is
+  # `<base>-<ctx/1024>k`, created in Phase 4 via `ollama create` with a
+  # PARAMETER num_ctx <ctx> line. Opencode's templates and the sidecar
+  # both reference the variant, not the base — see variant_tag_for in
+  # scripts/lib/tiers.sh for the why.
+  CHOSEN_DAILY_VARIANT=""
+  CHOSEN_HEAVY_VARIANT=""
+  if [ -n "$CHOSEN_DAILY" ]; then
+    local daily_ctx
+    daily_ctx=$(tiers_context_for "$CHOSEN_TIER" "$CHOSEN_DAILY")
+    CHOSEN_DAILY_VARIANT=$(variant_tag_for "$CHOSEN_DAILY" "$daily_ctx")
+  fi
+  if [ -n "$CHOSEN_HEAVY" ]; then
+    local heavy_ctx
+    heavy_ctx=$(tiers_context_for "$CHOSEN_TIER" "$CHOSEN_HEAVY")
+    CHOSEN_HEAVY_VARIANT=$(variant_tag_for "$CHOSEN_HEAVY" "$heavy_ctx")
+  fi
+
   # Compute total pull size by summing TSV size_gb for the chosen models
   TOTAL_PULL_GB=0
   local m row size_gb
@@ -443,6 +463,10 @@ phase3_plan() {
   fi
   info "pull:      ${MODELS_TO_PULL[*]}"
   info "pull size: ~${TOTAL_PULL_GB}GB"
+  local variant_display=""
+  [ -n "$CHOSEN_DAILY_VARIANT" ] && variant_display="$CHOSEN_DAILY_VARIANT"
+  [ -n "$CHOSEN_HEAVY_VARIANT" ] && variant_display="${variant_display:+$variant_display }$CHOSEN_HEAVY_VARIANT"
+  info "variants:  $variant_display  (local, baked num_ctx)"
   if [ "$CHOSEN_MODE" = "configured" ]; then
     info "config:    $OPENCODE_CONFIG_PATH  (from config/opencode/${CHOSEN_TIER}.json)"
   fi
@@ -515,10 +539,36 @@ phase4_execute() {
     fi
   fi
 
-  # Pull models
+  # Pull models, then create a local variant with num_ctx baked in.
+  #
+  # ollama's num_ctx defaults to 4096 regardless of what the model
+  # supports, and opencode's limit.context config is send-side only —
+  # it doesn't override ollama's receive-side window. At 4K, opencode's
+  # tool-definition prompts get truncated before the model sees the
+  # tool schema, and the model confabulates tool names from training.
+  # Baking num_ctx into a named variant is the fix: the variant loads
+  # at the intended context on every call. Session #04 confirmed this
+  # holds for qwen3:8b and qwen3-coder:30b — the entire "Qwen can't
+  # tool-call" finding from session #03 was this config bug, not a
+  # model capability bug.
   for m in "${MODELS_TO_PULL[@]}"; do
     info "pulling $m"
     run ollama pull "$m"
+    local ctx variant
+    ctx=$(tiers_context_for "$CHOSEN_TIER" "$m")
+    variant=$(variant_tag_for "$m" "$ctx")
+    info "creating variant $variant (num_ctx=$ctx)"
+    if [ "$DRY_RUN" = "1" ]; then
+      printf '  \033[90m[dry-run]\033[0m %s\n' "printf 'FROM $m\\nPARAMETER num_ctx $ctx\\n' | ollama create $variant -f /dev/stdin"
+    else
+      if printf 'FROM %s\nPARAMETER num_ctx %d\n' "$m" "$ctx" \
+          | ollama create "$variant" -f /dev/stdin >/dev/null 2>&1; then
+        ok "variant $variant ready"
+      else
+        x "failed to create variant $variant"
+        die "ollama create failed for $variant — check 'ollama list'"
+      fi
+    fi
   done
 
   # Configured mode: write the opencode config
@@ -572,13 +622,17 @@ write_sidecar() {
 }
 
 build_sidecar_contents() {
+  # Sidecar records the local variant tags (with baked num_ctx), not
+  # the upstream base tags. test.sh reads this and runs its inference
+  # and opencode-run checks against the variant — that's what the
+  # templates reference too, so every layer stays in sync.
   local models_list=""
-  if [ -n "$CHOSEN_DAILY" ]; then
-    models_list="  \"$CHOSEN_DAILY:daily\""
+  if [ -n "$CHOSEN_DAILY_VARIANT" ]; then
+    models_list="  \"$CHOSEN_DAILY_VARIANT:daily\""
   fi
-  if [ -n "$CHOSEN_HEAVY" ]; then
+  if [ -n "$CHOSEN_HEAVY_VARIANT" ]; then
     [ -n "$models_list" ] && models_list+=$'\n'
-    models_list+="  \"$CHOSEN_HEAVY:heavy\""
+    models_list+="  \"$CHOSEN_HEAVY_VARIANT:heavy\""
   fi
   local cfg_path=""
   [ "$CHOSEN_MODE" = "configured" ] && cfg_path="$OPENCODE_CONFIG_PATH"
@@ -622,13 +676,13 @@ print_done() {
   phase "Done"
   info "tier:          $CHOSEN_TIER"
   info "mode:          $CHOSEN_MODE"
-  info "daily driver:  ${CHOSEN_DAILY:-—}"
-  info "heavy mode:    ${CHOSEN_HEAVY:-—}"
+  info "daily driver:  ${CHOSEN_DAILY_VARIANT:-—}${CHOSEN_DAILY:+  (from $CHOSEN_DAILY)}"
+  info "heavy mode:    ${CHOSEN_HEAVY_VARIANT:-—}${CHOSEN_HEAVY:+  (from $CHOSEN_HEAVY)}"
   echo
   if [ "$CHOSEN_MODE" = "bare" ]; then
     info "try it:"
     info "  cd your-project"
-    info "  ollama launch opencode --model $CHOSEN_DAILY"
+    info "  ollama launch opencode --model $CHOSEN_DAILY_VARIANT"
   else
     info "try it:"
     info "  cd your-project && opencode"

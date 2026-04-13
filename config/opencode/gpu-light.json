@@ -8,7 +8,7 @@
         "baseURL": "http://localhost:11434/v1"
       },
       "models": {
-        "qwen3:8b": {
+        "qwen3:8b-32k": {
           "name": "Qwen3 8B (daily)",
           "tools": true,
           "limit": { "context": 32768, "output": 8192 }

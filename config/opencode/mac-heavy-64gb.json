@@ -8,12 +8,12 @@
         "baseURL": "http://localhost:11434/v1"
       },
       "models": {
-        "qwen3-coder:30b": {
+        "qwen3-coder:30b-64k": {
           "name": "Qwen3-Coder 30B-A3B (daily)",
           "tools": true,
           "limit": { "context": 65536, "output": 8192 }
         },
-        "qwen3-coder-next:80b": {
+        "qwen3-coder-next:80b-64k": {
           "name": "Qwen3-Coder-Next 80B MoE (heavy — unverified)",
           "tools": true,
           "limit": { "context": 65536, "output": 8192 }
