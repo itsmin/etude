@@ -1,8 +1,10 @@
 # etude
 
-A setup kit for running a Claude Code-like coding agent on open-weight models — locally, on a LAN peer, or through Ollama Cloud. Built for weekend projects, offline sessions, and hacking that shouldn't run up an API bill.
+Run an AI coding assistant on your own computer. No cloud, no API keys, no subscription — your code stays on your machine.
 
-Not a replacement for Claude Code or frontier-grade coding assistants. An étude is a practice piece — what you work on between performances, alone, because you want to.
+etude is a setup kit. It detects your hardware, picks models that fit, installs everything, and verifies it works. What you get is a local alternative to tools like Claude Code or GitHub Copilot — not as powerful, but free, private, and yours to run offline.
+
+Not a replacement for frontier-grade tools. An étude is a practice piece — what you work on between performances, alone, because you want to.
 
 ## What's in the box
 
@@ -63,7 +65,9 @@ See [docs/models.md](docs/models.md). The file is timestamped. When it's more th
 
 ## Status
 
-Early. Scaffold + harness exist. The install script, registry, and smoke test all run end-to-end in dry mode on the author's M3 Air. First real-hardware pass (actual install, actual model pull, actual opencode invocation) is the next session's job. Other machine profiles have configs and registry entries but none are yet verified.
+The install script, tier registry, smoke test, and agentic tool calling all work end-to-end on verified hardware. One Mac tier is fully verified — other tiers have config templates and registry entries but haven't been tested on real machines yet. Windows and LAN-serve paths are documented but unverified.
+
+If you hit a bug, it's probably a real bug. File an issue.
 
 ## License
 
