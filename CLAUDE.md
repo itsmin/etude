@@ -2,7 +2,7 @@
 
 Project: **etude** — an install kit and docs for running a Claude Code-like coding agent on open-weight models. Three tiers: local, LAN peer, Ollama Cloud.
 
-**Status**: Harness verified end-to-end on the M3 Air, **including agentic tool calling**. Session #04 closed out the session-#03 qwen-doesn't-tool-call finding — root cause was ollama's `num_ctx` defaulting to 4096 regardless of what the model supports, which silently truncated opencode's tool-schema prompt so the model confabulated tool names from training memory. Fix: etude now creates a local variant (e.g. `qwen3:8b-32k`) via `ollama create` with `PARAMETER num_ctx <N>` baked in, and all templates/sidecar/smoke tests reference the variant instead of the base tag. Both `qwen3:8b-32k` and `qwen3-coder:30b-32k` tool-call cleanly via opencode with the same prompts that failed in session #03. Mac-air-24gb is the first fully-verified tier (install + Level 5 smoke + tool-calling). Next up — second-machine verification on the M1 Air 16GB (mac-light tier, `qwen3:8b-16k` variant, fresh cask install). Other tiers use the same variant pattern but remain untested.
+**Status**: Harness verified end-to-end on the M3 Air, **including agentic tool calling**. Repo is **public** on GitHub (2026-04-16). `status.sh` audit tool shipped. Mac-air-24gb is the first fully-verified tier (install + Level 5 smoke + tool-calling). Next up — second-machine verification on the M1 Air 16GB (mac-light tier, `qwen3:8b-16k` variant, fresh cask install). Other tiers use the same variant pattern but remain untested.
 
 ---
 
@@ -94,7 +94,6 @@ Still unverified:
 
 - **Session #06: RTX 5080 PC first install** (gpu-16gb tier, Windows). Now also unblocked. Will exercise the `gpu-16gb` templates (`qwen3-coder:30b-32k` daily, `qwen3:8b-32k` speed) and the unverified `install-windows.md` prose. Ordering-wise: do M1 Air first to shake out any num_ctx-pattern edge cases before taking on a new OS surface.
 - **Rewrite `docs/install-macos.md`** — deferred from session #03 and still correct to defer. The prose is 133 lines of outdated brew-formula speculation *and* doesn't mention the variant tag pattern. Best rewritten after session #05 so it reflects both verified tiers and the final num_ctx story.
-- **Build `scripts/status.sh`** — read-only audit tool. Reads sidecar + TSV + `ollama list` + `ollama show`, reports drift between intended and actual state. Session #04 also surfaced a new audit surface: does every variant tag the sidecar records still exist locally (in case a user manually `ollama rm`ed one)? And does `tiers_context_for $tier $base` still match what `ollama show <variant>` reports? A `--check-updates` variant should also resolve every base tag against ollama's registry — that's the session-#03 class of bug.
 - **Build `install.sh --refresh` mode** — detect existing sidecar at startup, compare to current TSV, offer to pull delta, rebuild variants at the current `context` column, and rewrite config. This becomes a more interesting feature now that variants exist: a TSV bump from `context=32768` to `context=65536` should trigger a variant rebuild, not just a re-pull.
 - Flesh out `docs/usage.md` — day-to-day patterns, mode switching, real examples. Should also mention the `-<N>k` suffix so users don't get confused when `ollama list` shows names they didn't pull.
 - Capture real latency numbers for the LAN-serve flow (Air → desktop). Variant tags on LAN peers need either install.sh on the peer, or a manual `ollama create` — worth a dedicated usage note once the first LAN test happens.
@@ -119,7 +118,9 @@ Plan:
 6. Note any memory pressure (Activity Monitor, or `sudo memory_pressure`) while the 8B variant is loaded. If it thrashes with a browser open, record and consider the mac-light `context` budget.
 7. Commit any harness fixes that fall out. Close the "fresh cask install" and "daemon auto-start on cold machine" pending-verification items.
 
-Out of scope for #05: PC/Windows, install-macos.md rewrite, status.sh, LAN flow, Ollama Cloud auth.
+Out of scope for #05: PC/Windows, install-macos.md rewrite, LAN flow, Ollama Cloud auth.
+
+Post-install verification: run `./scripts/status.sh` after install to validate state via the new audit tool (shipped session #05a).
 
 **Conditional branches**:
 - **Everything works** → session #05 closes cleanly, mac-light is now a second verified tier, session #06 (PC) becomes P1.
@@ -141,7 +142,7 @@ Out of scope for #05: PC/Windows, install-macos.md rewrite, status.sh, LAN flow,
 - **~~qwen3:8b + opencode: not viable for agentic use~~ — RESOLVED in session #04.** The session-#03 finding was a config bug, not a capability bug. Root cause: ollama's `num_ctx` default of 4096 silently truncated opencode's tool-schema prompt below where the model ever saw the tool list, leading to confabulated tool names from training memory. Fix: create a local model variant (`qwen3:8b-32k`) via `ollama create` with `PARAMETER num_ctx <N>`, reference the variant in templates and sidecars. Both `qwen3:8b-32k` and `qwen3-coder:30b-32k` now tool-call cleanly through opencode on the M3 Air with the exact prompt that failed in session #03. See `docs/models.md` § "Local variant tags" and the Critical reminders block above.
 - **Ollama Cloud auth / pricing mechanics.** Still not explored. Sign-up flow, key storage, current `:cloud` model catalogue all still unknown. Parked until a session needs it.
 - **Windows install doc ordering.** The doc currently defaults to fully-native Windows with WSL2 as the advanced path. Since the PC doubles as a LAN inference server, WSL2-for-opencode + native-Ollama may be the better anchor. Revisit when verifying `install-windows.md`.
-- **Registry tag validation.** Session #03 caught `qwen3-coder:30b-a3b` in `tiers.tsv` as a tag that doesn't exist on ollama.com — the real tag is `qwen3-coder:30b`. Only caught because we did a real pull. `status.sh --check-updates` (P2) should do a "does every registered base tag still resolve against the ollama registry?" sanity check; `install.sh` Phase 1 could do the same on the tags it's about to pull. Session #04's variant tag layer does not help here — we still `ollama pull <base>` upstream, then derive the variant locally, so a bogus base tag still fails at pull time.
+- **Registry tag validation — partially addressed.** `status.sh --check-updates` (shipped session #05a) scrapes ollama.com/library tags pages to verify base tags resolve. Catches bogus tags like the session-#03 `qwen3-coder:30b-a3b` incident. Still open: should `install.sh` Phase 1 do the same check before attempting a pull? Lower priority now that `status.sh` exists as a pre-flight option.
 - **Variant rebuild on context bumps.** If `tiers.tsv` bumps a row's `context` column (e.g. 32768 → 65536), install.sh's current Phase 4 will happily `ollama create qwen3:8b-64k` on the next run, but a user who installed at 32k and doesn't re-run install.sh keeps an opencode.json referencing `qwen3:8b-32k` that no longer matches the template. This is the exact use case for the P2 `install.sh --refresh` mode. Noted so it doesn't quietly rot.
 
 ### Deferred (in scope, bumped)
@@ -149,6 +150,12 @@ Out of scope for #05: PC/Windows, install-macos.md rewrite, status.sh, LAN flow,
 *(none yet)*
 
 ### Complete (recent)
+
+### Session #05a — status.sh + README + repo public (2026-04-16)
+- **Built `scripts/status.sh`** — read-only audit: sidecar, models, variants (num_ctx via `ollama show`), config, registry freshness, orphan detection. `--check-updates` scrapes ollama.com to verify base tags. `--json` and `--verbose` modes. Verified on M3 Air — caught registry date drift and two orphan variants.
+- **README rewritten for accessibility.** Plain-language intro, updated status section (generalized away from machine-specific references), added full usage section (TUI, models, `-Nk` suffix, headless mode, health checks, expectations).
+- **Repo made public** on GitHub. All commits pushed.
+- **Bug found and fixed during development:** macOS `grep` interprets patterns starting with `-` as flags. All `grep` calls in status.sh use `--` separator and `-F` for literal matching where appropriate.
 
 ### Session #04 — num_ctx fix + variant tag pattern (2026-04-13)
 - **num_ctx theory confirmed on M3 Air.** Created `qwen3:8b-32k` and `qwen3-coder:30b-32k` via `ollama create` with `PARAMETER num_ctx <N>`. Both tool-called cleanly through opencode on the session-#03 README→SUMMARY prompt — the exact prompt that spent 4m41s in circular "no Read function" confabulation last session. qwen3:8b-32k: `→ Read → Write → success`, file on disk. qwen3-coder:30b-32k: same, 7m51s (30B is slow on M3 Air but correct). Root cause is ollama's `num_ctx=4096` default silently truncating opencode's tool-schema prompt below where the model ever sees the tool list.
